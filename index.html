@@ -31,7 +31,35 @@
         
         h1 { font-size: 1.5em; margin: 10px 0; text-shadow: none; color: #5d4037; }
         
-        /* STATUS BAR - Updated for ADA Contrast */
+        /* SETTINGS GEAR (Player 1 Only) */
+        #settings-btn {
+            position: fixed; top: 15px; right: 15px;
+            font-size: 2em; cursor: pointer; z-index: 201;
+            display: none; /* Hidden by default */
+            text-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        #settings-btn:hover { transform: rotate(90deg); }
+
+        #settings-menu {
+            position: fixed; top: 60px; right: 15px;
+            background: white; padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: none; z-index: 200;
+            border: 2px solid #5d4037;
+            width: 200px;
+        }
+        #settings-menu button {
+            background: #a1887f; color: white; border: none;
+            padding: 10px 20px; border-radius: 5px;
+            font-weight: bold; cursor: pointer;
+            font-size: 0.9em; width: 100%; margin-bottom: 10px;
+        }
+        #btn-restart { background: #c62828 !important; }
+        #btn-lightning { background: #ff9800 !important; color: #3e2723 !important; }
+
+        /* STATUS BAR */
         .status { 
             display: flex; justify-content: space-around; width: 95%; max-width: 500px; 
             margin-bottom: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; padding: 5px; 
@@ -74,7 +102,6 @@
         }
         #roll-btn { background: #a1887f; cursor: not-allowed; }
         #roll-btn.my-turn { background: #2e7d32; cursor: pointer; animation: pulse 1.5s infinite; }
-        /* NEW: Game Over Reset Button Style */
         #roll-btn.game-over { background: #d32f2f; cursor: pointer; animation: none; }
         
         /* LOBBY / COLOR SELECTION */
@@ -201,6 +228,12 @@
         </div>
     </div>
 
+    <div id="settings-btn" onclick="toggleSettings()">⚙️</div>
+    <div id="settings-menu">
+        <button id="btn-lightning" onclick="toggleLightning()">ENABLE LIGHTNING</button>
+        <button id="btn-restart" onclick="triggerReset()">RESTART GAME</button>
+    </div>
+
     <div id="identity-banner">Spectating...</div>
     <div id="target-pop">TARGET!<br>TARGET!<br>TARGET!<span id="target-name">PLAYER X IS LEADING</span></div>
 
@@ -268,8 +301,42 @@
         const targetPop = document.getElementById('target-pop');
         const targetName = document.getElementById('target-name');
         const shortcutModal = document.getElementById('shortcut-modal');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsMenu = document.getElementById('settings-menu');
+        const btnLightning = document.getElementById('btn-lightning');
 
         let pendingShortcutMarbleId = null;
+
+        // --- SETTINGS LOGIC ---
+        function toggleSettings() {
+            if (settingsMenu.style.display === 'block') {
+                settingsMenu.style.display = 'none';
+            } else {
+                settingsMenu.style.display = 'block';
+            }
+        }
+
+        function triggerReset() {
+            if (confirm("Are you sure you want to restart the game? This will send everyone back to the lobby.")) {
+                socket.emit('resetGame');
+                toggleSettings(); 
+            }
+        }
+
+        function toggleLightning() {
+            socket.emit('toggleLightning');
+            toggleSettings();
+        }
+
+        socket.on('lightningStatus', (isOn) => {
+            if (isOn) {
+                btnLightning.textContent = "DISABLE LIGHTNING";
+                btnLightning.style.background = "#ffd600"; 
+            } else {
+                btnLightning.textContent = "ENABLE LIGHTNING";
+                btnLightning.style.background = "#ff9800";
+            }
+        });
 
         // --- COLORS CONFIGURATION ---
         const colorPalette = [
@@ -479,6 +546,14 @@
             currentGameState = state;
             gameColors = state.playerColors || {};
             
+            // --- NEW: Toggle Settings Button for Player 1 only ---
+            if (myPlayerId === 1 && state.phase !== 'gameover') {
+                settingsBtn.style.display = 'block';
+            } else {
+                settingsBtn.style.display = 'none';
+                settingsMenu.style.display = 'none';
+            }
+            
             document.getElementById('message').textContent = state.message;
             const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
             document.getElementById('dice').textContent = state.currentRoll > 0 ? diceChars[state.currentRoll - 1] : '🎲';
@@ -521,7 +596,6 @@
             const isGameOver = state.phase === 'gameover';
             
             if (isGameOver) {
-                // UPDATE: Reset Game Button
                 rollBtn.textContent = "GAME OVER / NEW GAME";
                 rollBtn.disabled = false;
                 rollBtn.className = 'btn-base game-over';
@@ -648,11 +722,11 @@
             lobbyOverlay.style.display = 'none'; 
         });
 
-        // NEW: Handle Reset
         socket.on('gameReset', () => {
              lobbyOverlay.style.display = 'flex';
              board.innerHTML = '';
-             initBoard(); // Redraw clean board
+             initBoard(); 
+             settingsMenu.style.display = 'none';
         });
 
         socket.on('gameState', renderState);
