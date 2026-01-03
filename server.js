@@ -73,16 +73,14 @@ io.on('connection', (socket) => {
         io.emit('lobbyUpdate', getLobbyState());
     });
 
-    // NEW: Handle Name/Initials Entry
     socket.on('setName', (nameInput) => {
         if (gameState) return;
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
 
-        // Sanitize: Use Array.from or spread to correctly count/slice Emojis
         let safeName = [...(nameInput || "")].slice(0, 3).join('');
-        if (safeName.length === 0) safeName = `P${pid}`; // Fallback to P# if empty
+        if (safeName.length === 0) safeName = `P${pid}`; 
 
         players[pid].name = safeName;
         io.emit('lobbyUpdate', getLobbyState());
@@ -117,7 +115,7 @@ io.on('connection', (socket) => {
             });
 
             gameState = gameLogic.initServerState(colorMap);
-            gameState.playerNames = nameMap; // Inject names into game state
+            gameState.playerNames = nameMap;
 
             let firstActive = parseInt(seatedPlayers[0][0]);
             gameState.activePlayer = firstActive;
@@ -189,7 +187,6 @@ function performRollDice(playerId) {
     const roll = Math.floor(Math.random() * 6) + 1;
     gameState.currentRoll = roll;
     
-    // Get name for message
     const pName = gameState.playerNames[playerId] || `P${playerId}`;
 
     if (gameState.phase === 'init') {
@@ -318,6 +315,7 @@ function performMakeMove(playerId, marbleId, moveType) {
 function triggerLightningTurn() {
     if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
+    // CHANGED: Reduced delay to 50ms (effectively instant) to make it "faster"
     setTimeout(() => {
         if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
@@ -337,7 +335,7 @@ function triggerLightningTurn() {
                 }
             }
         }
-    }, 1000); 
+    }, 50); // Fast!
 }
 
 function getLobbyState() {
