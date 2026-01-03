@@ -89,6 +89,10 @@
             opacity: 0.9; 
             filter: grayscale(10%); 
         }
+        .player-status.empty-slot {
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
         
         .player-status strong { display: block; font-size: 1.2em; }
         .home-count { font-size: 0.9em; opacity: 0.9; }
@@ -305,6 +309,8 @@
         </div>
     </div>
 
+    <audio id="turn-audio" src="assets/player-turn.mp3" preload="auto"></audio>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="gameLogic.js"></script>
 
@@ -315,6 +321,19 @@
         let currentGameState = null;
         let lastLeaderId = null; 
         
+        let lastActivePlayer = null; 
+        const turnAudio = document.getElementById('turn-audio');
+        
+        // Global Lightning State
+        let isLightningMode = false;
+
+        document.body.addEventListener('click', () => {
+            turnAudio.play().then(() => {
+                turnAudio.pause();
+                turnAudio.currentTime = 0;
+            }).catch(() => {});
+        }, { once: true });
+
         function getSessionId() {
             let sid = localStorage.getItem('mukdek_session');
             if (!sid) {
@@ -374,6 +393,9 @@
         }
 
         socket.on('lightningStatus', (isOn) => {
+            // Update Global State
+            isLightningMode = isOn;
+
             if (isOn) {
                 btnLightning.textContent = "DISABLE LIGHTNING";
                 btnLightning.style.background = "#ffd600"; 
@@ -601,6 +623,20 @@
             currentGameState = state;
             gameColors = state.playerColors || {};
             
+            // --- AUDIO LOGIC ---
+            // Only play if:
+            // 1. It is the PLAY phase
+            // 2. The active player just changed
+            // 3. I am the active player
+            // 4. Lightning Mode is OFF
+            if (state.phase === 'play' && state.activePlayer !== lastActivePlayer) {
+                if (state.activePlayer === myPlayerId && !isLightningMode) {
+                    turnAudio.currentTime = 0;
+                    turnAudio.play().catch(e => console.log("Audio play blocked"));
+                }
+                lastActivePlayer = state.activePlayer;
+            }
+
             if (myPlayerId === 1 && state.phase !== 'gameover') {
                 settingsBtn.style.display = 'block';
             } else {
@@ -617,31 +653,41 @@
                 let pColor = gameColors[i];
                 let pName = (state.playerNames && state.playerNames[i]) || `P${i}`;
                 
-                // NEW: Medals
-                let rankIdx = state.finishedPlayers.indexOf(i);
-                let suffix = '';
-                if (rankIdx === 0) suffix = ' 🥇';
-                if (rankIdx === 1) suffix = ' 🥈';
-                if (rankIdx === 2) suffix = ' 🥉';
-                
-                el.querySelector('strong').textContent = pName + suffix;
+                // --- MEDAL & RANK LOGIC ---
+                let isRealPlayer = !!pColor;
 
-                if (pColor) {
-                    el.style.backgroundColor = pColor;
-                    el.style.color = getContrastColor(pColor);
-                    el.style.border = '2px solid rgba(0,0,0,0.2)';
-                    el.style.opacity = '1';
-                } else {
+                if (!isRealPlayer) {
+                    el.classList.add('empty-slot');
+                    el.querySelector('strong').textContent = pName;
                     el.style.backgroundColor = 'rgba(255,255,255,0.2)';
                     el.style.color = '#5d4037';
                     el.style.border = '1px dashed rgba(93, 64, 55, 0.3)';
                     el.style.opacity = '0.7';
-                }
-
-                if (state.finishedPlayers && state.finishedPlayers.includes(i)) {
-                    el.classList.add('finished');
                 } else {
-                    el.classList.remove('finished');
+                    el.classList.remove('empty-slot');
+                    
+                    let realFinishers = state.finishedPlayers.filter(pid => gameColors[pid]);
+                    let rankIdx = realFinishers.indexOf(i);
+                    
+                    let suffix = '';
+                    if (rankIdx === 0) suffix = ' 🥇';
+                    else if (rankIdx === 1) suffix = ' 🥈';
+                    else if (rankIdx === 2) suffix = ' 🥉';
+                    
+                    el.querySelector('strong').textContent = pName + suffix;
+
+                    if (pColor) {
+                        el.style.backgroundColor = pColor;
+                        el.style.color = getContrastColor(pColor);
+                        el.style.border = '2px solid rgba(0,0,0,0.2)';
+                        el.style.opacity = '1';
+                    }
+
+                    if (state.finishedPlayers.includes(i)) {
+                        el.classList.add('finished');
+                    } else {
+                        el.classList.remove('finished');
+                    }
                 }
 
                 if(i === state.activePlayer) el.classList.add('active');
