@@ -18,7 +18,7 @@ let gameState = null;
 let totalPlayersAtStart = 0;
 let gameDestructionTimeout = null;
 
-// NEW: Lightning Mode Flag
+// Lightning Mode Flag
 let lightningMode = false;
 
 io.on('connection', (socket) => {
@@ -34,13 +34,11 @@ io.on('connection', (socket) => {
         hostSocketId = socket.id;
     }
 
-    // Send initial state including lightning status
     socket.emit('lobbyUpdate', getLobbyState());
     if (gameState) {
         socket.emit('gameStart'); 
         socket.emit('gameState', gameState);
     }
-    // Broadcast lightning status on connect
     socket.emit('lightningStatus', lightningMode);
 
     // --- RECONNECTION ---
@@ -67,10 +65,26 @@ io.on('connection', (socket) => {
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
         for (let i = 1; i <= 4; i++) {
             if (players[i] === null) {
-                players[i] = { id: socket.id, session: sessionId, color: null }; 
+                // Default name is P1, P2, etc. until changed
+                players[i] = { id: socket.id, session: sessionId, color: null, name: `P${i}` }; 
                 break;
             }
         }
+        io.emit('lobbyUpdate', getLobbyState());
+    });
+
+    // NEW: Handle Name/Initials Entry
+    socket.on('setName', (nameInput) => {
+        if (gameState) return;
+        let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
+        if (!pEntry) return;
+        let pid = pEntry[0];
+
+        // Sanitize: Use Array.from or spread to correctly count/slice Emojis
+        let safeName = [...(nameInput || "")].slice(0, 3).join('');
+        if (safeName.length === 0) safeName = `P${pid}`; // Fallback to P# if empty
+
+        players[pid].name = safeName;
         io.emit('lobbyUpdate', getLobbyState());
     });
 
@@ -94,10 +108,17 @@ io.on('connection', (socket) => {
         if (activeCount >= 2 && allReady && !gameState) {
             console.log(`Starting game with ${activeCount} players.`);
             totalPlayersAtStart = activeCount;
+            
             let colorMap = {};
-            seatedPlayers.forEach(([k, v]) => { colorMap[k] = v.color; });
+            let nameMap = {};
+            seatedPlayers.forEach(([k, v]) => { 
+                colorMap[k] = v.color; 
+                nameMap[k] = v.name;
+            });
 
             gameState = gameLogic.initServerState(colorMap);
+            gameState.playerNames = nameMap; // Inject names into game state
+
             let firstActive = parseInt(seatedPlayers[0][0]);
             gameState.activePlayer = firstActive;
 
@@ -107,7 +128,6 @@ io.on('connection', (socket) => {
 
             io.emit('gameStart');
             broadcastGameState();
-            // Start the lightning loop if it was somehow left on, or just for consistency
             triggerLightningTurn();
         }
     });
@@ -116,27 +136,20 @@ io.on('connection', (socket) => {
         if (!gameState) return;
         console.log("Game Reset requested.");
         gameState = null;
-        lightningMode = false; // Reset lightning mode
+        lightningMode = false; 
         io.emit('lightningStatus', lightningMode);
         io.emit('gameReset');
         io.emit('lobbyUpdate', getLobbyState());
     });
 
-    // --- SETTINGS: LIGHTNING MODE ---
     socket.on('toggleLightning', () => {
-        // Only allow if game is running
         if (!gameState) return;
         lightningMode = !lightningMode;
-        console.log(`Lightning Mode set to: ${lightningMode}`);
         io.emit('lightningStatus', lightningMode);
-        
-        // If turned ON, try to trigger an action immediately
         if (lightningMode) triggerLightningTurn();
     });
     
-    // --- GAME ACTIONS ---
     socket.on('rollDice', () => {
-        // Validation: Must be active player's socket
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
         performRollDice(gameState.activePlayer);
@@ -168,22 +181,21 @@ io.on('connection', (socket) => {
     });
 });
 
-// --- CORE LOGIC FUNCTIONS (Decoupled from Socket) ---
-
 function performRollDice(playerId) {
     if (!gameState || gameState.currentRoll > 0) return;
     if (gameState.activePlayer !== playerId) return;
-    
-    // Prevent actions if player has finished
     if (gameState.finishedPlayers.includes(gameState.activePlayer)) return;
 
     const roll = Math.floor(Math.random() * 6) + 1;
     gameState.currentRoll = roll;
+    
+    // Get name for message
+    const pName = gameState.playerNames[playerId] || `P${playerId}`;
 
     if (gameState.phase === 'init') {
         let pIndex = gameState.activePlayer - 1;
         gameState.initRolls[pIndex] = roll;
-        gameState.message = `Player ${gameState.activePlayer} rolled ${roll}.`;
+        gameState.message = `${pName} rolled ${roll}.`;
 
         let realPlayerIds = Object.keys(players).filter(k => players[k] !== null).map(Number);
         let allRolled = realPlayerIds.every(pid => gameState.initRolls[pid-1] > 0);
@@ -198,16 +210,17 @@ function performRollDice(playerId) {
                 if (gameState.initRolls[pid-1] === maxRoll) winners.push(pid);
             });
             gameState.activePlayer = winners[0];
+            const winnerName = gameState.playerNames[winners[0]] || `P${winners[0]}`;
             gameState.phase = 'play';
-            gameState.message = `Player ${gameState.activePlayer} starts!`;
+            gameState.message = `${winnerName} starts!`;
             gameState.currentRoll = 0;
         } else {
             nextPlayer(); 
-            gameState.message = `Player ${gameState.activePlayer}, roll for order.`;
+            const nextName = gameState.playerNames[gameState.activePlayer] || `P${gameState.activePlayer}`;
+            gameState.message = `${nextName}, roll for order.`;
             gameState.currentRoll = 0;
         }
     } else {
-        // PLAY PHASE
         let movesMap = [];
         gameState.movableMarbles = [];
         let playerMarbles = gameState.marbles.filter(m => m.player === gameState.activePlayer);
@@ -230,7 +243,7 @@ function performRollDice(playerId) {
                 setTimeout(() => {
                     nextPlayer();
                     broadcastGameState();
-                    triggerLightningTurn(); // Trigger after turn pass
+                    triggerLightningTurn(); 
                 }, 1500);
             }
         } else {
@@ -238,7 +251,7 @@ function performRollDice(playerId) {
         }
     }
     broadcastGameState();
-    triggerLightningTurn(); // Check if we can auto-move
+    triggerLightningTurn(); 
 }
 
 function performMakeMove(playerId, marbleId, moveType) {
@@ -253,7 +266,6 @@ function performMakeMove(playerId, marbleId, moveType) {
     if (chosenMove) {
         let marble = gameState.marbles.find(m => m.id === marbleId);
         
-        // Capture Logic
         let victim = gameState.marbles.find(m => m.id !== marbleId && gameLogic.samePos(m.pos, chosenMove.dest));
         if (victim) {
             io.emit('murder', { ...victim.pos }); 
@@ -265,6 +277,7 @@ function performMakeMove(playerId, marbleId, moveType) {
         marble.pos = { ...chosenMove.dest };
 
         let pId = marble.player;
+        let pName = gameState.playerNames[pId] || `P${pId}`;
         let inHome = gameState.marbles.filter(m => m.player === pId && gameLogic.isHomePos(pId, m.pos)).length;
         
         if (inHome === 5) {
@@ -275,11 +288,11 @@ function performMakeMove(playerId, marbleId, moveType) {
             let finishedRealPlayers = gameState.finishedPlayers.length - emptySlots;
 
             if (finishedRealPlayers >= totalPlayersAtStart - 1) {
-                gameState.message = `GAME OVER! Player ${pId} takes ${getOrdinal(myRank)} Place!`;
+                gameState.message = `GAME OVER! ${pName} takes ${getOrdinal(myRank)} Place!`;
                 gameState.phase = 'gameover';
             } else {
-                gameState.message = `Player ${pId} takes ${getOrdinal(myRank)} Place!`;
-                broadcastGameState(); // Show immediate result
+                gameState.message = `${pName} takes ${getOrdinal(myRank)} Place!`;
+                broadcastGameState(); 
                 setTimeout(() => {
                      nextPlayer();
                      broadcastGameState();
@@ -289,7 +302,7 @@ function performMakeMove(playerId, marbleId, moveType) {
             }
         } else {
             if (gameState.currentRoll === 6 || gameState.currentRoll === 1) {
-                gameState.message = `Bonus roll! Player ${pId} goes again.`;
+                gameState.message = `Bonus roll! ${pName} goes again.`;
                 gameState.currentRoll = 0;
                 gameState.movableMarbles = [];
                 gameState.possibleMoves = [];
@@ -298,44 +311,33 @@ function performMakeMove(playerId, marbleId, moveType) {
             }
         }
         broadcastGameState();
-        triggerLightningTurn(); // Check if next state is auto-rollable
+        triggerLightningTurn(); 
     }
 }
 
-// --- LIGHTNING ROUND LOGIC ---
 function triggerLightningTurn() {
     if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
-    // Use a delay to allow UI updates and make it followable
     setTimeout(() => {
-        // Re-check state after delay (in case it changed or game ended)
         if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
-        // 1. Auto Roll
         if (gameState.currentRoll === 0) {
-            console.log(`Lightning: Auto-rolling for P${gameState.activePlayer}`);
             performRollDice(gameState.activePlayer);
             return;
         }
 
-        // 2. Auto Move (If exactly one choice)
         if (gameState.currentRoll > 0 && gameState.movableMarbles.length > 0) {
-            // Check total number of distinct move options
-            // If only 1 marble can move, AND that marble has only 1 destination (e.g. no shortcut option)
             if (gameState.possibleMoves.length === 1) {
                 let movesForMarble = gameState.possibleMoves[0][1];
                 if (movesForMarble.length === 1) {
                     let mId = gameState.possibleMoves[0][0];
                     let mType = movesForMarble[0].type;
-                    console.log(`Lightning: Auto-moving marble ${mId}`);
                     performMakeMove(gameState.activePlayer, mId, mType);
                     return;
                 }
             }
-            // If we get here, there is a choice. We wait for the user.
-            console.log("Lightning: Waiting for user choice.");
         }
-    }, 1000); // 1 second delay between actions
+    }, 1000); 
 }
 
 function getLobbyState() {
@@ -360,7 +362,8 @@ function nextPlayer() {
     gameState.currentRoll = 0;
     gameState.movableMarbles = [];
     gameState.possibleMoves = [];
-    gameState.message = `Player ${gameState.activePlayer}'s turn.`;
+    let nextName = (gameState.playerNames && gameState.playerNames[gameState.activePlayer]) || `P${gameState.activePlayer}`;
+    gameState.message = `${nextName}'s turn.`;
 }
 
 function getOrdinal(n) {
