@@ -19,44 +19,34 @@ let hostSocketId = null;
 let gameState = null;
 let totalPlayersAtStart = 0;
 
-// Timeout to clear game if everyone disconnects
 let gameDestructionTimeout = null;
 
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
     connectedSockets.add(socket.id);
 
-    // Cancel game destruction if someone connects
     if (gameDestructionTimeout) {
         clearTimeout(gameDestructionTimeout);
         gameDestructionTimeout = null;
     }
 
-    // Assign Host if none exists (or if host reconnects, we handle that in 'register')
     if (hostSocketId === null) {
         hostSocketId = socket.id;
     }
 
-    // 1. Send initial lobby status (just to show UI, logic happens in register)
     socket.emit('lobbyUpdate', getLobbyState());
 
     // --- RECONNECTION HANDSHAKE ---
     socket.on('register', (sessionId) => {
-        // Check if this session belongs to an existing player
         let returningPlayerEntry = Object.entries(players).find(([k, v]) => v && v.session === sessionId);
         
         if (returningPlayerEntry) {
-            // RECONNECTION DETECTED
             let pid = returningPlayerEntry[0];
             console.log(`Player ${pid} reconnected (Session: ${sessionId})`);
-            
-            // Update socket ID to the new one
             players[pid].id = socket.id;
             
-            // If I was the host, update host ID
             if (hostSocketId === null) hostSocketId = socket.id;
 
-            // Send them their identity immediately
             socket.emit('lobbyUpdate', getLobbyState());
             
             if (gameState) {
@@ -64,8 +54,6 @@ io.on('connection', (socket) => {
                 socket.emit('gameState', gameState);
             }
         } else {
-            // NEW PLAYER
-            // Just send lobby update, they are a spectator/unassigned until they join
             socket.emit('lobbyUpdate', getLobbyState());
         }
     });
@@ -74,16 +62,11 @@ io.on('connection', (socket) => {
 
     socket.on('joinGame', (sessionId) => {
         if (gameState) return;
-        
-        // Check if already seated
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
 
-        // Find first empty slot
         for (let i = 1; i <= 4; i++) {
             if (players[i] === null) {
-                // bind socket AND session
                 players[i] = { id: socket.id, session: sessionId, color: null }; 
-                console.log(`Player ${i} assigned to session ${sessionId}`);
                 break;
             }
         }
@@ -92,14 +75,10 @@ io.on('connection', (socket) => {
 
     socket.on('selectColor', (hex) => {
         if (gameState) return;
-
-        // Find player by socket ID
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
 
         let pid = pEntry[0];
-        
-        // Ensure color isn't taken by someone else
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
 
@@ -138,19 +117,31 @@ io.on('connection', (socket) => {
             broadcastGameState();
         }
     });
+
+    // --- NEW: RESET GAME ---
+    socket.on('resetGame', () => {
+        // Optional: Only allow Host or any player to reset? Currently allowing any active player.
+        // If we want only host: if (socket.id !== hostSocketId) return;
+        
+        if (!gameState) return;
+        console.log("Game Reset requested.");
+        gameState = null;
+        
+        // We keep players seated, but we need to notify everyone to go back to Lobby
+        io.emit('gameReset');
+        io.emit('lobbyUpdate', getLobbyState());
+    });
     
     // --- GAME ACTIONS ---
 
     socket.on('rollDice', () => {
-        // Identity check: Must match active player's socket
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
-
         if (!gameState || gameState.currentRoll > 0) return;
 
+        // BUG FIX: Prevent skipping. 
+        // If active player is finished (waiting for victory lap timeout), IGNORE roll clicks.
         if (gameState.finishedPlayers.includes(gameState.activePlayer)) {
-            nextPlayer();
-            broadcastGameState();
             return;
         }
 
@@ -262,13 +253,18 @@ io.on('connection', (socket) => {
                 if (finishedRealPlayers >= totalPlayersAtStart - 1) {
                     gameState.message = `GAME OVER! Player ${pId} takes ${getOrdinal(myRank)} Place!`;
                     gameState.phase = 'gameover';
+                    broadcastGameState(); // Final broadcast
                 } else {
                     gameState.message = `Player ${pId} takes ${getOrdinal(myRank)} Place!`;
+                    
+                    // BUG FIX: Broadcast state IMMEDIATELY so users see the message and board update.
+                    broadcastGameState();
+                    
                     setTimeout(() => {
                          nextPlayer();
                          broadcastGameState();
                     }, 2500); 
-                    return; 
+                    return; // Return so we don't hit the normal 'nextPlayer' logic below
                 }
             } else {
                 if (gameState.currentRoll === 6 || gameState.currentRoll === 1) {
@@ -279,8 +275,8 @@ io.on('connection', (socket) => {
                 } else {
                     nextPlayer();
                 }
+                broadcastGameState();
             }
-            broadcastGameState();
         }
     });
 
@@ -288,14 +284,10 @@ io.on('connection', (socket) => {
         console.log(`Socket ${socket.id} disconnected`);
         connectedSockets.delete(socket.id);
         
-        // Find who disconnected
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         
         if (pEntry) {
             let pid = pEntry[0];
-            
-            // CRITICAL: If game is running, DO NOT remove player from slot. 
-            // Only remove if we are in Lobby mode.
             if (!gameState) {
                 players[pid] = null;
                 console.log(`Player ${pid} left lobby.`);
@@ -304,7 +296,6 @@ io.on('connection', (socket) => {
             }
         }
 
-        // Host Migration (if host leaves, assign to next available socket)
         if (socket.id === hostSocketId) {
             if (connectedSockets.size > 0) {
                 hostSocketId = connectedSockets.values().next().value;
@@ -313,14 +304,12 @@ io.on('connection', (socket) => {
             }
         }
         
-        // If everyone leaves, start a timer to kill the game
         if (connectedSockets.size === 0) {
-            console.log("All players disconnected. Setting destruction timer.");
             gameDestructionTimeout = setTimeout(() => {
                 console.log("Game destroyed due to inactivity.");
                 gameState = null;
                 players = { 1: null, 2: null, 3: null, 4: null };
-            }, 60000); // 1 minute to reconnect before hard reset
+            }, 60000); 
         }
         
         io.emit('lobbyUpdate', getLobbyState()); 

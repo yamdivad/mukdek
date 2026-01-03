@@ -74,6 +74,8 @@
         }
         #roll-btn { background: #a1887f; cursor: not-allowed; }
         #roll-btn.my-turn { background: #2e7d32; cursor: pointer; animation: pulse 1.5s infinite; }
+        /* NEW: Game Over Reset Button Style */
+        #roll-btn.game-over { background: #d32f2f; cursor: pointer; animation: none; }
         
         /* LOBBY / COLOR SELECTION */
         #lobby-overlay {
@@ -238,7 +240,6 @@
         let lastLeaderId = null; 
         
         // --- SESSION MANAGEMENT ---
-        // Generate or retrieve a unique ID for this browser
         function getSessionId() {
             let sid = localStorage.getItem('mukdek_session');
             if (!sid) {
@@ -249,7 +250,6 @@
         }
         const mySessionId = getSessionId();
 
-        // Send identity immediately upon connection
         socket.on('connect', () => {
             console.log("Connected with session:", mySessionId);
             socket.emit('register', mySessionId);
@@ -304,7 +304,7 @@
         }
         
         function joinGame() {
-            socket.emit('joinGame', mySessionId); // Send session ID when joining
+            socket.emit('joinGame', mySessionId); 
         }
         
         function selectColor(index) {
@@ -325,7 +325,6 @@
         }
 
         socket.on('lobbyUpdate', (state) => {
-            // Check if my session is in the players list
             let mySlot = Object.entries(state.players).find(([k, v]) => v && v.session === mySessionId);
             
             if (mySlot) {
@@ -522,9 +521,16 @@
             const isGameOver = state.phase === 'gameover';
             
             if (isGameOver) {
-                rollBtn.textContent = "GAME OVER";
-                rollBtn.disabled = true;
-                rollBtn.className = 'btn-base';
+                // UPDATE: Reset Game Button
+                rollBtn.textContent = "GAME OVER / NEW GAME";
+                rollBtn.disabled = false;
+                rollBtn.className = 'btn-base game-over';
+                rollBtn.onclick = () => {
+                    if(confirm("Start a new game with the same players?")) {
+                        socket.emit('resetGame');
+                    }
+                };
+                document.getElementById('dice').classList.remove('rolling');
             } else if (isMyTurn) {
                 if (state.currentRoll === 0 || state.phase === 'init') {
                     rollBtn.textContent = state.phase === 'init' ? "ROLL FOR ORDER" : "ROLL DICE";
@@ -641,6 +647,14 @@
         socket.on('gameStart', () => { 
             lobbyOverlay.style.display = 'none'; 
         });
+
+        // NEW: Handle Reset
+        socket.on('gameReset', () => {
+             lobbyOverlay.style.display = 'flex';
+             board.innerHTML = '';
+             initBoard(); // Redraw clean board
+        });
+
         socket.on('gameState', renderState);
 
         initLobbyUI();
