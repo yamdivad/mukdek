@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Mukdek</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #eaddcf; 
+            color: #3e2723; 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: flex-start; 
+            touch-action: manipulation;
+            overflow-y: auto; 
+            padding-bottom: 50px;
+        }
+        
+        /* IDENTITY HEADER */
+        #identity-banner { 
+            width: 100%; padding: 15px; text-align: center; font-weight: bold; font-size: 1.2em; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; transition: all 0.3s; 
+            border-bottom: 2px solid rgba(0,0,0,0.1); 
+            background: #d7ccc8; color: #3e2723;
+        }
+        
+        h1 { font-size: 1.5em; margin: 10px 0; text-shadow: none; color: #5d4037; }
+        
+        /* STATUS BAR - Updated for ADA Contrast */
+        .status { 
+            display: flex; justify-content: space-around; width: 95%; max-width: 500px; 
+            margin-bottom: 10px; background: rgba(255,255,255,0.4); border-radius: 10px; padding: 5px; 
+            border: 1px solid rgba(93, 64, 55, 0.2);
+            gap: 5px;
+        }
+        .player-status { 
+            text-align: center; padding: 8px 5px; border-radius: 8px; 
+            transition: all 0.3s; flex: 1; position: relative; 
+            border: 2px solid transparent;
+            font-size: 0.9em;
+            /* Default Unclaimed Style */
+            background-color: rgba(255,255,255,0.2);
+            color: #5d4037;
+            border: 1px dashed rgba(93, 64, 55, 0.3);
+        }
+        
+        /* Active Player Indicator - Uses Border/Scale instead of background color change to preserve contrast */
+        .player-status.active { 
+            transform: scale(1.1); 
+            z-index: 10;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            border-style: solid; 
+            border-width: 2px;
+            border-color: rgba(0,0,0,0.5); /* Dark border to highlight active turn */
+        }
+        
+        .player-status.finished { opacity: 0.5; text-decoration: line-through; filter: grayscale(50%); }
+        .player-status strong { display: block; font-size: 1.2em; }
+        .home-count { font-size: 0.9em; opacity: 0.9; }
+        
+        /* CONTROLS */
+        #controls { margin-bottom: 10px; text-align: center; width: 100%; }
+        #dice { font-size: 4em; cursor: pointer; display: inline-block; margin: 5px; color: #3e2723; }
+        #dice.rolling { animation: roll 0.6s ease-in-out; }
+        @keyframes roll { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .btn-base {
+            display: block; width: 80%; max-width: 300px; margin: 5px auto; padding: 15px; 
+            font-size: 1.3em; font-weight: bold; color: white; border: none; border-radius: 50px; 
+            cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        #roll-btn { background: #a1887f; cursor: not-allowed; }
+        #roll-btn.my-turn { background: #2e7d32; cursor: pointer; animation: pulse 1.5s infinite; }
+        
+        /* LOBBY / COLOR SELECTION */
+        #lobby-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(62, 39, 35, 0.98); 
+            z-index: 2000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            overflow-y: auto; padding: 20px;
+        }
+        .lobby-content { width: 100%; max-width: 500px; text-align: center; }
+        
+        .color-grid { 
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin: 20px 0; 
+        }
+        .color-btn {
+            width: 60px; height: 60px; border-radius: 50%; 
+            border: 4px solid rgba(255,255,255,0.2);
+            cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+        .color-btn:hover:not(:disabled) { transform: scale(1.1); border-color: white; }
+        .color-btn.selected { transform: scale(1.2); border-color: white; box-shadow: 0 0 15px gold; z-index: 2; }
+        .color-btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(80%); }
+        
+        #start-btn { background: #ff6f00; margin-top: 20px; opacity: 0.5; pointer-events: none; color: white; }
+        #start-btn.ready { opacity: 1; pointer-events: all; }
+        #join-btn { background: #2e7d32; }
+
+        /* BOARD */
+        #board-container { 
+            position: relative; 
+            width: 95vmin; height: 95vmin; 
+            max-width: 600px; max-height: 600px; 
+            margin: 10px auto; 
+            border: 8px solid #5d4037; 
+            background: #eaddcf; 
+            overflow: hidden; 
+            transition: transform 1.5s cubic-bezier(0.25, 1, 0.5, 1); 
+        }
+        #board { display: grid; grid-template-columns: repeat(17, 1fr); grid-template-rows: repeat(17, 1fr); gap: 0; width: 100%; height: 100%; background: transparent; padding: 1px; }
+        .cell { background: transparent; position: relative; border-radius: 2px; }
+        
+        .track { background: #5d4037; border: 1px solid #4e342e; } 
+        .shortcut { background: #009688; border: 2px solid #004d40; }
+        .work, .home { background: #8d6e63; border: 1px solid #5d4037; opacity: 0.8; }
+        
+        /* MARBLES */
+        .marble { 
+            width: 4.5%; height: 4.5%;
+            border-radius: 50%; position: absolute; z-index: 20; 
+            box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.6); 
+            border: 2px solid rgba(255,255,255,0.8); 
+            transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s;
+        }
+        .marble[data-color="#ffffff"] { border: 2px solid #999; }
+
+        .marble.movable { z-index: 100; cursor: pointer; filter: drop-shadow(0 0 5px gold); }
+        .marble.movable::after {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            border-radius: 50%; border: 2px solid white; opacity: 0;
+            animation: ringPulse 1.5s infinite;
+        }
+        @keyframes ringPulse { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(1.2); opacity: 0; } }
+
+        /* SPLAT ANIMATION */
+        .splat {
+            position: absolute; width: 5.5%; height: 5.5%;
+            background: radial-gradient(circle, #b71c1c 40%, transparent 70%);
+            border-radius: 50%; 
+            z-index: 10; pointer-events: none;
+            clip-path: polygon(20% 0%, 30% 20%, 50% 0%, 60% 25%, 90% 5%, 80% 40%, 100% 50%, 80% 60%, 95% 85%, 60% 75%, 50% 100%, 40% 75%, 10% 90%, 25% 60%, 0% 50%, 25% 40%);
+            animation: fadeSplat 2s forwards;
+        }
+        @keyframes fadeSplat { 0% { opacity: 1; transform: scale(0); } 10% { transform: scale(1.5) rotate(10deg); } 100% { opacity: 0; transform: scale(1.5) rotate(20deg); } }
+
+        /* MODALS */
+        #shortcut-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            width: 80%; max-width: 300px; background: rgba(62, 39, 35, 0.95);
+            border: 2px solid #d7ccc8; border-radius: 15px; padding: 20px; text-align: center;
+            z-index: 500; box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: transform 0.3s; pointer-events: none; opacity: 0;
+            color: white;
+        }
+        #shortcut-modal.active { transform: translate(-50%, -50%) scale(1); pointer-events: all; opacity: 1; }
+        .modal-btn { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin: 5px; font-size: 1.1em; }
+        .btn-yes { background: #2e7d32; color: white; }
+        .btn-no { background: #c62828; color: white; }
+
+        #target-pop {
+            position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0);
+            background: rgba(198, 40, 40, 0.95); color: white; padding: 30px; border-radius: 50px;
+            font-size: 2em; font-weight: 900; text-transform: uppercase;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 1000;
+            text-shadow: 2px 2px 0px #b71c1c; pointer-events: none;
+            transition: transform 0.4s; text-align: center; border: 4px solid white;
+        }
+        #target-pop.active { transform: translate(-50%, -50%) scale(1); animation: shake 0.5s infinite; }
+        #target-pop span { display: block; font-size: 0.5em; font-weight: normal; margin-top: 5px; opacity: 0.9; }
+        @keyframes shake { 0%, 100% { transform: translate(-50%, -50%) rotate(0deg); } 25% { transform: translate(-50%, -50%) rotate(-5deg); } 75% { transform: translate(-50%, -50%) rotate(5deg); } }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(46, 125, 50, 0); } 100% { box-shadow: 0 0 0 0 rgba(46, 125, 50, 0); } }
+    </style>
+</head>
+<body>
+    
+    <div id="lobby-overlay">
+        <div class="lobby-content">
+            <h1 style="color:white; font-size: 3em; margin-bottom: 0;">Mukdek</h1>
+            <h2 style="color:#d7ccc8; font-size:1em; margin-bottom:20px;">Digital Edition</h2>
+            
+            <div id="lobby-ui-join" style="display:block;">
+                <p style="color:#d7ccc8; margin-bottom:15px;">Waiting to join...</p>
+                <button id="join-btn" class="btn-base" onclick="joinGame()">JOIN GAME</button>
+            </div>
+
+            <div id="lobby-ui-select" style="display:none;">
+                <p style="color:white; margin-bottom: 10px;">You are <strong>Player <span id="lobby-pid">?</span></strong></p>
+                <p style="color:#d7ccc8; font-size: 0.9em;">Choose your marble color:</p>
+                <div class="color-grid" id="color-container">
+                    </div>
+                <div id="lobby-msg" style="margin-bottom:10px; font-style:italic; color:#d7ccc8">Waiting for others...</div>
+                <button id="start-btn" class="btn-base" onclick="requestStart()">START GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="identity-banner">Spectating...</div>
+    <div id="target-pop">TARGET!<br>TARGET!<br>TARGET!<span id="target-name">PLAYER X IS LEADING</span></div>
+
+    <h1>Mukdek</h1>
+    
+    <div class="status">
+        <div class="player-status" id="p1"><strong>P1</strong><span class="home-count"><span id="h1">0</span>/5</span></div>
+        <div class="player-status" id="p2"><strong>P2</strong><span class="home-count"><span id="h2">0</span>/5</span></div>
+        <div class="player-status" id="p3"><strong>P3</strong><span class="home-count"><span id="h3">0</span>/5</span></div>
+        <div class="player-status" id="p4"><strong>P4</strong><span class="home-count"><span id="h4">0</span>/5</span></div>
+    </div>
+
+    <div id="controls">
+        <div id="message">Waiting for start...</div>
+        <div id="dice">🎲</div>
+        <button id="roll-btn" class="btn-base" disabled>Wait for Game</button>
+    </div>
+
+    <div id="board-container">
+        <div id="board"></div>
+        <div id="shortcut-modal">
+            <h2>Shortcut Available!</h2>
+            <p style="color:white; margin-bottom:15px;">Do you want to take the center shortcut?</p>
+            <button class="modal-btn btn-yes" onclick="confirmShortcut(true)">YES!</button>
+            <button class="modal-btn btn-no" onclick="confirmShortcut(false)">NO</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="gameLogic.js"></script>
+
+    <script>
+        const socket = io();
+        let myPlayerId = null;
+        let myColor = null;
+        let currentGameState = null;
+        let lastLeaderId = null; 
+        
+        const board = document.getElementById('board');
+        const container = document.getElementById('board-container');
+        const rollBtn = document.getElementById('roll-btn');
+        const lobbyOverlay = document.getElementById('lobby-overlay');
+        const lobbyJoinUI = document.getElementById('lobby-ui-join');
+        const lobbySelectUI = document.getElementById('lobby-ui-select');
+        const colorContainer = document.getElementById('color-container');
+        const lobbyPidSpan = document.getElementById('lobby-pid');
+        const startBtn = document.getElementById('start-btn');
+        const banner = document.getElementById('identity-banner');
+        const targetPop = document.getElementById('target-pop');
+        const targetName = document.getElementById('target-name');
+        const shortcutModal = document.getElementById('shortcut-modal');
+
+        let pendingShortcutMarbleId = null;
+
+        // --- COLORS CONFIGURATION ---
+        const colorPalette = [
+            { name: "Red", hex: "#e74c3c" },
+            { name: "Pink", hex: "#e91e63" },
+            { name: "Dark Green", hex: "#1b5e20" },
+            { name: "Light Green", hex: "#2ecc71" },
+            { name: "Dark Blue", hex: "#1565c0" },
+            { name: "Light Blue", hex: "#3498db" },
+            { name: "White", hex: "#ffffff" },
+            { name: "Black", hex: "#212121" },
+            { name: "Yellow", hex: "#f1c40f" },
+            { name: "Orange", hex: "#ff9800" },
+            { name: "Purple", hex: "#9c27b0" }
+        ];
+
+        let gameColors = {}; 
+
+        // --- LOBBY LOGIC ---
+        
+        function initLobbyUI() {
+            colorContainer.innerHTML = '';
+            colorPalette.forEach((c, idx) => {
+                let btn = document.createElement('button');
+                btn.className = 'color-btn';
+                btn.style.backgroundColor = c.hex;
+                btn.title = c.name;
+                btn.id = `col-btn-${idx}`;
+                btn.onclick = () => selectColor(idx);
+                colorContainer.appendChild(btn);
+            });
+        }
+        
+        function joinGame() {
+            socket.emit('joinGame');
+        }
+        
+        function selectColor(index) {
+            socket.emit('selectColor', colorPalette[index].hex);
+        }
+
+        function requestStart() {
+            socket.emit('requestStartGame');
+        }
+
+        // Helper: Choose black or white text based on background luminance
+        function getContrastColor(hex) {
+            // Remove hash
+            hex = hex.replace('#', '');
+            let r = parseInt(hex.substr(0, 2), 16);
+            let g = parseInt(hex.substr(2, 2), 16);
+            let b = parseInt(hex.substr(4, 2), 16);
+            let yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return (yiq >= 128) ? '#000000' : '#ffffff';
+        }
+
+        socket.on('lobbyUpdate', (state) => {
+            let mySlot = Object.entries(state.players).find(([k, v]) => v && v.id === socket.id);
+            
+            if (mySlot) {
+                myPlayerId = parseInt(mySlot[0]);
+                myColor = mySlot[1].color;
+                
+                lobbyJoinUI.style.display = 'none';
+                lobbySelectUI.style.display = 'block';
+                lobbyPidSpan.textContent = myPlayerId;
+                
+                colorPalette.forEach((c, idx) => {
+                    let btn = document.getElementById(`col-btn-${idx}`);
+                    let takenBy = Object.values(state.players).find(p => p && p.color === c.hex);
+                    
+                    if (myColor === c.hex) {
+                        btn.classList.add('selected');
+                        btn.disabled = false;
+                    } else if (takenBy) {
+                        btn.classList.remove('selected');
+                        btn.disabled = true;
+                    } else {
+                        btn.classList.remove('selected');
+                        btn.disabled = false;
+                    }
+                });
+
+                updateIdentity(myPlayerId, myColor || '#9e9e9e');
+
+            } else {
+                lobbyJoinUI.style.display = 'block';
+                lobbySelectUI.style.display = 'none';
+                if (state.seatedCount >= 4) {
+                    document.getElementById('join-btn').disabled = true;
+                    document.getElementById('join-btn').textContent = "FULL";
+                } else {
+                    document.getElementById('join-btn').disabled = false;
+                    document.getElementById('join-btn').textContent = "JOIN GAME";
+                }
+            }
+
+            if (socket.id === state.hostId) {
+                let seated = Object.values(state.players).filter(p => p !== null);
+                let allReady = seated.length >= 2 && seated.every(p => p.color !== null);
+                
+                startBtn.style.display = 'block';
+                if (allReady) {
+                    startBtn.classList.add('ready');
+                    document.getElementById('lobby-msg').textContent = "Everyone is ready!";
+                } else {
+                    startBtn.classList.remove('ready');
+                    document.getElementById('lobby-msg').textContent = "Waiting for players to pick colors...";
+                }
+            } else {
+                startBtn.style.display = 'none';
+                document.getElementById('lobby-msg').textContent = "Waiting for Host to start...";
+            }
+        });
+
+        // --- GAME LOGIC ---
+
+        function initBoard() {
+            board.innerHTML = '';
+            const trackSet = new Set(gameLogic.trackStr);
+            const workSets = gameLogic.players.map(p => new Set(p.workStr));
+            const homeSets = gameLogic.players.map(p => new Set(p.homeStr));
+
+            for (let r = 0; r < 17; r++) {
+                for (let c = 0; c < 17; c++) {
+                    let cell = document.createElement('div');
+                    cell.className = 'cell';
+                    
+                    let key = gameLogic.colMap[c] + (r + 1);
+                    if (trackSet.has(key)) cell.classList.add('track');
+                    if (key === 'I9') cell.classList.add('shortcut'); 
+
+                    for (let pp = 0; pp < 4; pp++) {
+                        if (workSets[pp].has(key)) {
+                            cell.classList.add('work');
+                        } else if (homeSets[pp].has(key)) {
+                            cell.classList.add('home');
+                        }
+                    }
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function updateIdentity(pid, colorHex) {
+            if(!pid) return;
+            banner.textContent = `YOU ARE PLAYER ${pid}`;
+            banner.style.backgroundColor = colorHex;
+            banner.style.color = getContrastColor(colorHex);
+
+            let rotation = 0;
+            switch(pid) {
+                case 1: rotation = 180; break;
+                case 2: rotation = 90; break;
+                case 3: rotation = 0; break;
+                case 4: rotation = 270; break;
+            }
+            container.style.transform = `rotate(${rotation}deg)`;
+            shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
+        }
+
+        function checkForLeader(marbles) {
+            let counts = [0,0,0,0];
+            marbles.forEach(m => {
+                if (gameLogic.isHomePos(m.player, m.pos)) counts[m.player - 1]++;
+            });
+
+            let max = Math.max(...counts);
+            if (max === 0) return; 
+
+            let leaders = [];
+            counts.forEach((c, i) => { if(c === max) leaders.push(i + 1); });
+
+            if (leaders.length === 1) {
+                let newLeader = leaders[0];
+                if (newLeader !== lastLeaderId) {
+                    lastLeaderId = newLeader;
+                    triggerTargetPopup(newLeader);
+                }
+            } else {
+                lastLeaderId = null; 
+            }
+        }
+
+        function triggerTargetPopup(pid) {
+            let pColor = gameColors[pid] || '#999';
+            targetName.textContent = `PLAYER ${pid} IS LEADING!`;
+            targetPop.style.backgroundColor = pColor;
+            targetPop.style.color = getContrastColor(pColor);
+            targetPop.classList.add('active');
+            setTimeout(() => {
+                targetPop.classList.remove('active');
+            }, 2000);
+        }
+
+        socket.on('murder', (pos) => {
+            let splat = document.createElement('div');
+            splat.className = 'splat';
+            let cellPct = 100/17; 
+            let centerX = (pos.col * cellPct) + (cellPct/2);
+            let centerY = (pos.row * cellPct) + (cellPct/2);
+            splat.style.left = `calc(${centerX}% - 2.75%)`; 
+            splat.style.top = `calc(${centerY}% - 2.75%)`;
+            container.appendChild(splat);
+            setTimeout(() => { splat.remove(); }, 2000);
+        });
+
+        function renderState(state) {
+            currentGameState = state;
+            gameColors = state.playerColors || {};
+            
+            document.getElementById('message').textContent = state.message;
+            const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+            document.getElementById('dice').textContent = state.currentRoll > 0 ? diceChars[state.currentRoll - 1] : '🎲';
+
+            for(let i=1; i<=4; i++) {
+                let el = document.getElementById(`p${i}`);
+                let pColor = gameColors[i];
+                
+                // ADA COMPLIANCE LOGIC:
+                if (pColor) {
+                    el.style.backgroundColor = pColor;
+                    el.style.color = getContrastColor(pColor); // Contrast text (black/white)
+                    el.style.border = '2px solid rgba(0,0,0,0.2)'; // Solid border
+                    el.style.opacity = '1';
+                } else {
+                    // Empty / Unclaimed slot styling
+                    el.style.backgroundColor = 'rgba(255,255,255,0.2)';
+                    el.style.color = '#5d4037';
+                    el.style.border = '1px dashed rgba(93, 64, 55, 0.3)';
+                    el.style.opacity = '0.7';
+                }
+
+                if (state.finishedPlayers && state.finishedPlayers.includes(i)) {
+                    el.classList.add('finished');
+                } else {
+                    el.classList.remove('finished');
+                }
+
+                if(i === state.activePlayer) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+                
+                let inHome = state.marbles.filter(m => m.player === i && gameLogic.isHomePos(i, m.pos)).length;
+                document.getElementById(`h${i}`).textContent = inHome;
+            }
+
+            checkForLeader(state.marbles);
+
+            const isMyTurn = (state.activePlayer === myPlayerId);
+            const isGameOver = state.phase === 'gameover';
+            
+            if (isGameOver) {
+                rollBtn.textContent = "GAME OVER";
+                rollBtn.disabled = true;
+                rollBtn.className = 'btn-base';
+            } else if (isMyTurn) {
+                if (state.currentRoll === 0 || state.phase === 'init') {
+                    rollBtn.textContent = state.phase === 'init' ? "ROLL FOR ORDER" : "ROLL DICE";
+                    rollBtn.disabled = false;
+                    rollBtn.className = 'btn-base my-turn';
+                    rollBtn.onclick = () => { 
+                        document.getElementById('dice').classList.add('rolling');
+                        socket.emit('rollDice'); 
+                    };
+                } else {
+                    rollBtn.textContent = "MOVE A MARBLE";
+                    rollBtn.disabled = true; 
+                    rollBtn.className = 'btn-base';
+                    document.getElementById('dice').classList.remove('rolling');
+                }
+            } else {
+                rollBtn.textContent = `WAITING FOR P${state.activePlayer}`;
+                rollBtn.disabled = true;
+                rollBtn.className = 'btn-base';
+            }
+
+            let posGroups = {};
+            state.marbles.forEach(m => {
+                let key = m.pos.col + "_" + m.pos.row;
+                if (!posGroups[key]) posGroups[key] = [];
+                posGroups[key].push(m);
+            });
+
+            let existingMs = document.querySelectorAll('.marble');
+            existingMs.forEach(em => {
+                let id = parseInt(em.id.split('-')[1]);
+                if(!state.marbles.find(m => m.id === id)) em.remove();
+            });
+
+            state.marbles.forEach(m => {
+                let el = document.getElementById(`m-${m.id}`);
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = `m-${m.id}`;
+                    el.className = `marble`;
+                    container.appendChild(el);
+                }
+                
+                let mColor = gameColors[m.player] || '#999';
+                el.style.background = mColor; 
+                el.style.background = `radial-gradient(circle at 30% 30%, white -20%, ${mColor} 30%, black 140%)`;
+                
+                el.setAttribute('data-color', mColor);
+
+                let isMovable = state.movableMarbles.includes(m.id) && m.player === myPlayerId;
+                if (isMovable) {
+                    el.classList.add('movable');
+                    el.onclick = () => handleMarbleClick(m.id);
+                } else {
+                    el.classList.remove('movable');
+                    el.onclick = null;
+                }
+
+                let group = posGroups[m.pos.col + "_" + m.pos.row];
+                let indexInGroup = group.findIndex(gm => gm.id === m.id);
+                
+                let cellPct = 100/17; 
+                let centerX = (m.pos.col * cellPct) + (cellPct/2);
+                let centerY = (m.pos.row * cellPct) + (cellPct/2);
+
+                let offX = 0, offY = 0;
+                if (group.length > 1) {
+                     offX = (indexInGroup % 2 === 0 ? 1 : -1) * 0.8 * (Math.floor(indexInGroup/2) + 1);
+                     offY = (indexInGroup % 2 !== 0 ? 1 : -1) * 0.8 * (Math.floor(indexInGroup/2) + 1);
+                }
+
+                el.style.left = `calc(${centerX + offX}% - 2.25%)`; 
+                el.style.top = `calc(${centerY + offY}% - 2.25%)`;
+            });
+        }
+
+        function handleMarbleClick(mid) {
+            let movesPair = currentGameState.possibleMoves.find(pm => pm[0] === mid);
+            if (!movesPair) return;
+            let moves = movesPair[1];
+
+            if (moves.some(m => m.type === 'shortcut') && moves.length > 1) {
+                pendingShortcutMarbleId = mid;
+                let rotation = 0;
+                if (myPlayerId === 1) rotation = 180;
+                else if (myPlayerId === 2) rotation = 90;
+                else if (myPlayerId === 4) rotation = 270;
+
+                shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(1)`;
+                shortcutModal.classList.add('active');
+            } else {
+                let type = moves.length === 1 ? moves[0].type : 'normal';
+                socket.emit('makeMove', { marbleId: mid, moveType: type });
+            }
+        }
+
+        function confirmShortcut(takeIt) {
+            shortcutModal.classList.remove('active');
+            setTimeout(() => {
+                let rotation = 0;
+                if (myPlayerId === 1) rotation = 180;
+                else if (myPlayerId === 2) rotation = 90;
+                else if (myPlayerId === 4) rotation = 270;
+                shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
+            }, 300);
+
+            if (pendingShortcutMarbleId !== null) {
+                let type = takeIt ? 'shortcut' : 'normal';
+                socket.emit('makeMove', { marbleId: pendingShortcutMarbleId, moveType: type });
+                pendingShortcutMarbleId = null;
+            }
+        }
+
+        socket.on('gameStart', () => { 
+            lobbyOverlay.style.display = 'none'; 
+        });
+        socket.on('gameState', renderState);
+
+        initLobbyUI();
+        initBoard();
+    </script>
+</body>
+</html>
