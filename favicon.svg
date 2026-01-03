@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="100" fill="#5d4037"/>
+  
+  <rect x="30" y="30" width="452" height="452" rx="70" fill="#eaddcf"/>
+
+  <path d="M160 380 Q 130 350 110 380 Q 90 410 120 430 Q 150 450 160 420 Z" fill="#b71c1c" />
+  <path d="M150 362 L 130 340 L 160 350 L 180 330 L 170 360 Z" fill="#b71c1c" />
+
+  <circle cx="150" cy="150" r="90" fill="url(#gradRed)" stroke="white" stroke-width="10"/>
+  
+  <circle cx="362" cy="150" r="90" fill="url(#gradGreen)" stroke="white" stroke-width="10"/>
+  
+  <circle cx="150" cy="362" r="90" fill="url(#gradYellow)" stroke="white" stroke-width="10"/>
+  
+  <circle cx="362" cy="362" r="90" fill="url(#gradBlue)" stroke="white" stroke-width="10"/>
+
+  <defs>
+    <radialGradient id="gradRed" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" style="stop-color:#e74c3c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c0392b;stop-opacity:1" />
+    </radialGradient>
+    <radialGradient id="gradGreen" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" style="stop-color:#2ecc71;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#27ae60;stop-opacity:1" />
+    </radialGradient>
+    <radialGradient id="gradYellow" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" style="stop-color:#f1c40f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f39c12;stop-opacity:1" />
+    </radialGradient>
+    <radialGradient id="gradBlue" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2980b9;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+</svg>
