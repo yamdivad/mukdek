@@ -315,7 +315,7 @@ function performMakeMove(playerId, marbleId, moveType) {
 function triggerLightningTurn() {
     if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
-    // CHANGED: Reduced delay to 50ms (effectively instant) to make it "faster"
+    // 50ms delay for blazing fast feeling but stable execution
     setTimeout(() => {
         if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
@@ -335,7 +335,7 @@ function triggerLightningTurn() {
                 }
             }
         }
-    }, 50); // Fast!
+    }, 50); 
 }
 
 function getLobbyState() {
