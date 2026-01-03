@@ -43,20 +43,18 @@
             transition: all 0.3s; flex: 1; position: relative; 
             border: 2px solid transparent;
             font-size: 0.9em;
-            /* Default Unclaimed Style */
             background-color: rgba(255,255,255,0.2);
             color: #5d4037;
             border: 1px dashed rgba(93, 64, 55, 0.3);
         }
         
-        /* Active Player Indicator - Uses Border/Scale instead of background color change to preserve contrast */
         .player-status.active { 
             transform: scale(1.1); 
             z-index: 10;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             border-style: solid; 
             border-width: 2px;
-            border-color: rgba(0,0,0,0.5); /* Dark border to highlight active turn */
+            border-color: rgba(0,0,0,0.5); 
         }
         
         .player-status.finished { opacity: 0.5; text-decoration: line-through; filter: grayscale(50%); }
@@ -239,6 +237,24 @@
         let currentGameState = null;
         let lastLeaderId = null; 
         
+        // --- SESSION MANAGEMENT ---
+        // Generate or retrieve a unique ID for this browser
+        function getSessionId() {
+            let sid = localStorage.getItem('mukdek_session');
+            if (!sid) {
+                sid = 'sess_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+                localStorage.setItem('mukdek_session', sid);
+            }
+            return sid;
+        }
+        const mySessionId = getSessionId();
+
+        // Send identity immediately upon connection
+        socket.on('connect', () => {
+            console.log("Connected with session:", mySessionId);
+            socket.emit('register', mySessionId);
+        });
+
         const board = document.getElementById('board');
         const container = document.getElementById('board-container');
         const rollBtn = document.getElementById('roll-btn');
@@ -288,7 +304,7 @@
         }
         
         function joinGame() {
-            socket.emit('joinGame');
+            socket.emit('joinGame', mySessionId); // Send session ID when joining
         }
         
         function selectColor(index) {
@@ -299,9 +315,7 @@
             socket.emit('requestStartGame');
         }
 
-        // Helper: Choose black or white text based on background luminance
         function getContrastColor(hex) {
-            // Remove hash
             hex = hex.replace('#', '');
             let r = parseInt(hex.substr(0, 2), 16);
             let g = parseInt(hex.substr(2, 2), 16);
@@ -311,7 +325,8 @@
         }
 
         socket.on('lobbyUpdate', (state) => {
-            let mySlot = Object.entries(state.players).find(([k, v]) => v && v.id === socket.id);
+            // Check if my session is in the players list
+            let mySlot = Object.entries(state.players).find(([k, v]) => v && v.session === mySessionId);
             
             if (mySlot) {
                 myPlayerId = parseInt(mySlot[0]);
@@ -473,14 +488,12 @@
                 let el = document.getElementById(`p${i}`);
                 let pColor = gameColors[i];
                 
-                // ADA COMPLIANCE LOGIC:
                 if (pColor) {
                     el.style.backgroundColor = pColor;
-                    el.style.color = getContrastColor(pColor); // Contrast text (black/white)
-                    el.style.border = '2px solid rgba(0,0,0,0.2)'; // Solid border
+                    el.style.color = getContrastColor(pColor);
+                    el.style.border = '2px solid rgba(0,0,0,0.2)';
                     el.style.opacity = '1';
                 } else {
-                    // Empty / Unclaimed slot styling
                     el.style.backgroundColor = 'rgba(255,255,255,0.2)';
                     el.style.color = '#5d4037';
                     el.style.border = '1px dashed rgba(93, 64, 55, 0.3)';
