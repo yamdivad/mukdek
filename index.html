@@ -293,7 +293,7 @@
 
                 <div id="lobby-msg" style="margin-bottom:10px; font-style:italic; color:#d7ccc8">Waiting for others...</div>
                 
-                <button id="ready-btn" class="btn-base" onclick="clickReady()" style="display:none;">I'M READY</button>
+                <button id="ready-btn" class="btn-base" onclick="clickReady(true)" style="display:none;">I'M READY</button>
                 
                 <button id="start-btn" class="btn-base" onclick="requestStart()">START GAME</button>
             </div>
@@ -408,8 +408,9 @@
             socket.emit('setName', e.target.value);
         });
 
-        function clickReady() {
-            socket.emit('playerReady');
+        // NEW: Toggle ready state
+        function clickReady(status) {
+            socket.emit('playerReady', status);
         }
 
         function toggleSettings() {
@@ -530,7 +531,7 @@
                     
                     if (pData.ready) {
                         tk.classList.add('ready');
-                        tk.innerHTML = (i === 1) ? '👑' : '✓'; // Crown for host, check for others
+                        tk.innerHTML = (i === 1) ? '👑' : '✓';
                     } else {
                         tk.innerHTML = '';
                     }
@@ -553,15 +554,25 @@
                     nameInput.value = pData.name.replace(/^P\d$/, ''); 
                 }
 
-                // Lock inputs if Ready
-                if (isMeReady && myPlayerId !== 1) { // Host (P1) is always "ready" effectively
+                // NEW: Lock Inputs logic
+                if (isMeReady && myPlayerId !== 1) { 
                     nameInput.disabled = true;
-                    readyBtn.style.display = 'none';
+                    // Switch to "CHANGE" button
+                    readyBtn.style.display = 'block';
+                    readyBtn.textContent = "CHANGE";
+                    readyBtn.style.background = "#757575"; // Grey
+                    readyBtn.onclick = () => clickReady(false);
+                    
                     document.getElementById('lobby-msg').textContent = "Ready! Waiting for host...";
                 } else {
                     nameInput.disabled = false;
                     if (myPlayerId !== 1) {
+                        // Switch to "I'M READY" button
                         readyBtn.style.display = 'block';
+                        readyBtn.textContent = "I'M READY";
+                        readyBtn.style.background = "#0277bd"; // Blue
+                        readyBtn.onclick = () => clickReady(true);
+                        
                         document.getElementById('lobby-msg').textContent = "Pick color/initials, then click Ready.";
                     }
                 }
@@ -609,8 +620,7 @@
                 let seated = Object.values(state.players).filter(p => p !== null);
                 let allReady = seated.length >= 2 && seated.every(p => p.color !== null);
                 
-                // HOST LOGIC: Start Button
-                readyBtn.style.display = 'none'; // Host doesn't need "Ready", they have "Start"
+                readyBtn.style.display = 'none'; 
                 startBtn.style.display = 'block';
                 
                 if (allReady) {

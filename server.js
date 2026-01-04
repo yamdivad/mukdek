@@ -65,7 +65,7 @@ io.on('connection', (socket) => {
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
         for (let i = 1; i <= 4; i++) {
             if (players[i] === null) {
-                // Initialize with ready: false (unless P1, usually host is implicitly ready but we track it)
+                // Initialize with ready: false
                 players[i] = { 
                     id: socket.id, 
                     session: sessionId, 
@@ -73,7 +73,7 @@ io.on('connection', (socket) => {
                     name: `P${i}`,
                     ready: false 
                 }; 
-                // If this became Player 1, they are the host and effectively "ready" to start
+                // If Host, auto ready
                 if (i === 1) players[i].ready = true;
                 break;
             }
@@ -86,9 +86,6 @@ io.on('connection', (socket) => {
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
-
-        // If player is already "ready", don't allow changes (simple lock)
-        // if (players[pid].ready && pid != 1) return; 
 
         let safeName = [...(nameInput || "")].slice(0, 3).join('');
         if (safeName.length === 0) safeName = `P${pid}`; 
@@ -103,22 +100,20 @@ io.on('connection', (socket) => {
         if (!pEntry) return;
         let pid = pEntry[0];
         
-        // if (players[pid].ready && pid != 1) return;
-
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
         players[pid].color = hex;
         io.emit('lobbyUpdate', getLobbyState());
     });
 
-    // NEW: Player Ready Toggle
-    socket.on('playerReady', () => {
+    // UPDATED: Toggle Ready State
+    socket.on('playerReady', (status) => {
         if (gameState) return;
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         
         let pid = pEntry[0];
-        players[pid].ready = true;
+        players[pid].ready = !!status; // Force boolean
         io.emit('lobbyUpdate', getLobbyState());
     });
 
@@ -128,9 +123,6 @@ io.on('connection', (socket) => {
         let activeCount = seatedPlayers.length;
         let allColors = seatedPlayers.every(([k, v]) => v.color !== null);
 
-        // Optional: Enforce that all seated players must be ready? 
-        // For now, we trust the host to check the visual indicators.
-        
         if (activeCount >= 2 && allColors && !gameState) {
             console.log(`Starting game with ${activeCount} players.`);
             totalPlayersAtStart = activeCount;
@@ -164,7 +156,7 @@ io.on('connection', (socket) => {
         gameState = null;
         lightningMode = false; 
         
-        // Reset readiness on new game (except Host P1)
+        // Reset readiness on new game (except Host)
         for(let i=1; i<=4; i++) {
             if(players[i]) players[i].ready = (i === 1);
         }
@@ -202,7 +194,6 @@ io.on('connection', (socket) => {
         }
         if (socket.id === hostSocketId) {
             hostSocketId = connectedSockets.size > 0 ? connectedSockets.values().next().value : null;
-            // New host becomes ready automatically
             let newHostEntry = Object.entries(players).find(([k, v]) => v && v.id === hostSocketId);
             if(newHostEntry) players[newHostEntry[0]].ready = true;
         }
