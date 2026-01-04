@@ -21,6 +21,30 @@ let gameDestructionTimeout = null;
 // Lightning Mode Flag
 let lightningMode = false;
 
+// --- SECURITY HELPERS ---
+
+// 1. Sanitize text to prevent HTML injection (XSS)
+function sanitizeString(str) {
+    if (!str) return "";
+    return String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;").trim();
+}
+
+// 2. Validate Hex Color format
+function isValidHex(hex) {
+    return /^#[0-9A-F]{6}$/i.test(hex);
+}
+
+// 3. Rate Limiting Helper
+const RATE_LIMIT_MS = 200; 
+function isRateLimited(playerObj) {
+    const now = Date.now();
+    if (playerObj.lastAction && (now - playerObj.lastAction < RATE_LIMIT_MS)) {
+        return true; 
+    }
+    playerObj.lastAction = now;
+    return false;
+}
+
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
     connectedSockets.add(socket.id);
@@ -43,11 +67,20 @@ io.on('connection', (socket) => {
 
     // --- RECONNECTION ---
     socket.on('register', (sessionId) => {
+        // Validation: Ensure sessionId is a string
+        if (typeof sessionId !== 'string') return;
+
         let returningPlayerEntry = Object.entries(players).find(([k, v]) => v && v.session === sessionId);
         if (returningPlayerEntry) {
             let pid = returningPlayerEntry[0];
             players[pid].id = socket.id;
-            if (hostSocketId === null) hostSocketId = socket.id;
+            
+            if (pid === '1') {
+                hostSocketId = socket.id;
+            } else if (hostSocketId === null) {
+                hostSocketId = socket.id;
+            }
+
             socket.emit('lobbyUpdate', getLobbyState());
             if (gameState) {
                 socket.emit('gameStart');
@@ -62,19 +95,25 @@ io.on('connection', (socket) => {
     // --- LOBBY ACTIONS ---
     socket.on('joinGame', (sessionId) => {
         if (gameState) return;
+        if (typeof sessionId !== 'string') return;
+        
+        // Prevent double joining
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
+
         for (let i = 1; i <= 4; i++) {
             if (players[i] === null) {
-                // Initialize with ready: false
                 players[i] = { 
                     id: socket.id, 
                     session: sessionId, 
                     color: null, 
                     name: `P${i}`,
-                    ready: false 
+                    ready: false,
+                    lastAction: 0 // Initialize timestamp for rate limiting
                 }; 
-                // If Host, auto ready
-                if (i === 1) players[i].ready = true;
+                if (i === 1) {
+                    players[i].ready = true;
+                    hostSocketId = socket.id;
+                }
                 break;
             }
         }
@@ -82,12 +121,20 @@ io.on('connection', (socket) => {
     });
 
     socket.on('setName', (nameInput) => {
-        if (gameState) return;
+        if (gameState) return; // Prevent changing name during game
+        
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
+        let pData = players[pid];
 
-        let safeName = [...(nameInput || "")].slice(0, 3).join('');
+        if (isRateLimited(pData)) return; // Rate Limit Check
+
+        // Sanitize: Strip HTML tags, limit length
+        let cleanName = sanitizeString(nameInput);
+        
+        // Handle Emojis correctly using spread syntax
+        let safeName = [...(cleanName || "")].slice(0, 3).join('');
         if (safeName.length === 0) safeName = `P${pid}`; 
 
         players[pid].name = safeName;
@@ -95,30 +142,41 @@ io.on('connection', (socket) => {
     });
 
     socket.on('selectColor', (hex) => {
-        if (gameState) return;
+        if (gameState) return; // Prevent changing color during game
+        
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
-        
+        let pData = players[pid];
+
+        if (isRateLimited(pData)) return; // Rate Limit Check
+
+        // Security: Validate it is a real hex color
+        if (!isValidHex(hex)) return;
+
+        // Ensure color isn't taken
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
+
         players[pid].color = hex;
         io.emit('lobbyUpdate', getLobbyState());
     });
 
-    // UPDATED: Toggle Ready State
     socket.on('playerReady', (status) => {
         if (gameState) return;
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         
         let pid = pEntry[0];
-        players[pid].ready = !!status; // Force boolean
+        if (isRateLimited(players[pid])) return;
+
+        players[pid].ready = !!status; 
         io.emit('lobbyUpdate', getLobbyState());
     });
 
     socket.on('requestStartGame', () => {
         if (socket.id !== hostSocketId) return;
+        
         let seatedPlayers = Object.entries(players).filter(([k, v]) => v !== null);
         let activeCount = seatedPlayers.length;
         let allColors = seatedPlayers.every(([k, v]) => v.color !== null);
@@ -151,14 +209,22 @@ io.on('connection', (socket) => {
     });
 
     socket.on('resetGame', () => {
+        // Only allow active players or host to reset
         if (!gameState) return;
+        
+        // Find player triggering reset
+        let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
+        if (!pEntry) return;
+
         console.log("Game Reset requested.");
         gameState = null;
         lightningMode = false; 
         
-        // Reset readiness on new game (except Host)
         for(let i=1; i<=4; i++) {
-            if(players[i]) players[i].ready = (i === 1);
+            if(players[i]) {
+                players[i].ready = (i === 1);
+                players[i].lastAction = 0;
+            }
         }
 
         io.emit('lightningStatus', lightningMode);
@@ -168,20 +234,36 @@ io.on('connection', (socket) => {
 
     socket.on('toggleLightning', () => {
         if (!gameState) return;
+        // Only Host or Active Player can toggle? For now, allowing P1 (Host) usually
+        if (socket.id !== hostSocketId) return;
+
         lightningMode = !lightningMode;
         io.emit('lightningStatus', lightningMode);
         if (lightningMode) triggerLightningTurn();
     });
     
+    // --- GAMEPLAY ACTIONS ---
     socket.on('rollDice', () => {
+        if (!gameState) return;
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
+        
+        if (isRateLimited(pData)) return; // Rate Limit
+
         performRollDice(gameState.activePlayer);
     });
 
     socket.on('makeMove', (data) => {
+        if (!gameState) return;
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
+
+        if (isRateLimited(pData)) return; // Rate Limit
+
+        // Validate data types
+        if (typeof data.marbleId !== 'number') return;
+        if (typeof data.moveType !== 'string') return;
+
         performMakeMove(gameState.activePlayer, data.marbleId, data.moveType);
     });
 
@@ -192,11 +274,16 @@ io.on('connection', (socket) => {
             let pid = pEntry[0];
             if (!gameState) players[pid] = null;
         }
+        
         if (socket.id === hostSocketId) {
             hostSocketId = connectedSockets.size > 0 ? connectedSockets.values().next().value : null;
-            let newHostEntry = Object.entries(players).find(([k, v]) => v && v.id === hostSocketId);
-            if(newHostEntry) players[newHostEntry[0]].ready = true;
+            // Try to assign ready to new host if in lobby
+            if (!gameState && hostSocketId) {
+                let newHostEntry = Object.entries(players).find(([k, v]) => v && v.id === hostSocketId);
+                if(newHostEntry) players[newHostEntry[0]].ready = true;
+            }
         }
+        
         if (connectedSockets.size === 0) {
             gameDestructionTimeout = setTimeout(() => {
                 gameState = null;
@@ -293,7 +380,7 @@ function performMakeMove(playerId, marbleId, moveType) {
         
         let victim = gameState.marbles.find(m => m.id !== marbleId && gameLogic.samePos(m.pos, chosenMove.dest));
         if (victim) {
-            io.emit('murder', { ...victim.pos }); 
+            io.emit('murder', { pos: victim.pos, victimId: victim.player }); 
             let pData = gameLogic.players[victim.player - 1];
             let emptyWork = pData.work.find(w => !gameState.marbles.some(m => gameLogic.samePos(m.pos, w)));
             if(emptyWork) victim.pos = { ...emptyWork };

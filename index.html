@@ -408,7 +408,7 @@
             socket.emit('setName', e.target.value);
         });
 
-        // NEW: Toggle ready state
+        // Toggle ready state
         function clickReady(status) {
             socket.emit('playerReady', status);
         }
@@ -554,7 +554,7 @@
                     nameInput.value = pData.name.replace(/^P\d$/, ''); 
                 }
 
-                // NEW: Lock Inputs logic
+                // Lock Inputs logic
                 if (isMeReady && myPlayerId !== 1) { 
                     nameInput.disabled = true;
                     // Switch to "CHANGE" button
@@ -723,18 +723,21 @@
             currentGameState = state;
             gameColors = state.playerColors || {};
             
-            if (state.phase === 'play' && state.activePlayer !== lastActivePlayer) {
-                if (turnSoundTimeout) clearTimeout(turnSoundTimeout);
-
+            if (state.phase === 'play') {
                 if (state.activePlayer === myPlayerId) {
-                    updateFavicon(true);
+                    if (turnSoundTimeout) clearTimeout(turnSoundTimeout);
+                    
+                    let duration = (lastActivePlayer !== myPlayerId) ? 5000 : 15000;
+                    
                     if (!isLightningMode) {
                         turnSoundTimeout = setTimeout(() => {
                             turnAudio.currentTime = 0;
                             turnAudio.play().catch(e => console.log("Audio blocked"));
-                        }, 10000); 
+                        }, duration); 
                     }
+                    updateFavicon(true);
                 } else {
+                    if (turnSoundTimeout) clearTimeout(turnSoundTimeout);
                     updateFavicon(false);
                 }
                 lastActivePlayer = state.activePlayer;
