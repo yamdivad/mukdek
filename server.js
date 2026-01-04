@@ -18,23 +18,18 @@ let gameState = null;
 let totalPlayersAtStart = 0;
 let gameDestructionTimeout = null;
 
-// Lightning Mode Flag
 let lightningMode = false;
 
 // --- SECURITY HELPERS ---
-
-// 1. Sanitize text to prevent HTML injection (XSS)
 function sanitizeString(str) {
     if (!str) return "";
     return String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;").trim();
 }
 
-// 2. Validate Hex Color format
 function isValidHex(hex) {
     return /^#[0-9A-F]{6}$/i.test(hex);
 }
 
-// 3. Rate Limiting Helper
 const RATE_LIMIT_MS = 200; 
 function isRateLimited(playerObj) {
     const now = Date.now();
@@ -65,9 +60,7 @@ io.on('connection', (socket) => {
     }
     socket.emit('lightningStatus', lightningMode);
 
-    // --- RECONNECTION ---
     socket.on('register', (sessionId) => {
-        // Validation: Ensure sessionId is a string
         if (typeof sessionId !== 'string') return;
 
         let returningPlayerEntry = Object.entries(players).find(([k, v]) => v && v.session === sessionId);
@@ -92,12 +85,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- LOBBY ACTIONS ---
     socket.on('joinGame', (sessionId) => {
         if (gameState) return;
         if (typeof sessionId !== 'string') return;
-        
-        // Prevent double joining
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
 
         for (let i = 1; i <= 4; i++) {
@@ -108,7 +98,7 @@ io.on('connection', (socket) => {
                     color: null, 
                     name: `P${i}`,
                     ready: false,
-                    lastAction: 0 // Initialize timestamp for rate limiting
+                    lastAction: 0 
                 }; 
                 if (i === 1) {
                     players[i].ready = true;
@@ -121,19 +111,15 @@ io.on('connection', (socket) => {
     });
 
     socket.on('setName', (nameInput) => {
-        if (gameState) return; // Prevent changing name during game
-        
+        if (gameState) return; 
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
         let pData = players[pid];
 
-        if (isRateLimited(pData)) return; // Rate Limit Check
+        if (isRateLimited(pData)) return; 
 
-        // Sanitize: Strip HTML tags, limit length
         let cleanName = sanitizeString(nameInput);
-        
-        // Handle Emojis correctly using spread syntax
         let safeName = [...(cleanName || "")].slice(0, 3).join('');
         if (safeName.length === 0) safeName = `P${pid}`; 
 
@@ -142,19 +128,15 @@ io.on('connection', (socket) => {
     });
 
     socket.on('selectColor', (hex) => {
-        if (gameState) return; // Prevent changing color during game
-        
+        if (gameState) return; 
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
         let pData = players[pid];
 
-        if (isRateLimited(pData)) return; // Rate Limit Check
-
-        // Security: Validate it is a real hex color
+        if (isRateLimited(pData)) return; 
         if (!isValidHex(hex)) return;
 
-        // Ensure color isn't taken
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
 
@@ -172,6 +154,36 @@ io.on('connection', (socket) => {
 
         players[pid].ready = !!status; 
         io.emit('lobbyUpdate', getLobbyState());
+    });
+
+    // --- KICK PLAYER ---
+    socket.on('kickPlayer', (targetPid) => {
+        // Only Host (P1) can kick
+        if (socket.id !== hostSocketId) return;
+        
+        // Cannot kick self
+        if (targetPid === 1) return;
+
+        if (players[targetPid]) {
+            let socketId = players[targetPid].id;
+            players[targetPid] = null;
+            console.log(`Host kicked Player ${targetPid}`);
+            
+            // Notify the kicked player to reload
+            io.to(socketId).emit('kicked');
+            
+            // Update everyone else
+            io.emit('lobbyUpdate', getLobbyState());
+        }
+    });
+
+    socket.on('claimHost', () => {
+        let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
+        if (pEntry && pEntry[0] === '1') {
+            hostSocketId = socket.id;
+            console.log("Player 1 manually claimed host.");
+            io.emit('lobbyUpdate', getLobbyState());
+        }
     });
 
     socket.on('requestStartGame', () => {
@@ -209,10 +221,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('resetGame', () => {
-        // Only allow active players or host to reset
         if (!gameState) return;
-        
-        // Find player triggering reset
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
 
@@ -234,7 +243,6 @@ io.on('connection', (socket) => {
 
     socket.on('toggleLightning', () => {
         if (!gameState) return;
-        // Only Host or Active Player can toggle? For now, allowing P1 (Host) usually
         if (socket.id !== hostSocketId) return;
 
         lightningMode = !lightningMode;
@@ -242,13 +250,12 @@ io.on('connection', (socket) => {
         if (lightningMode) triggerLightningTurn();
     });
     
-    // --- GAMEPLAY ACTIONS ---
     socket.on('rollDice', () => {
         if (!gameState) return;
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
         
-        if (isRateLimited(pData)) return; // Rate Limit
+        if (isRateLimited(pData)) return; 
 
         performRollDice(gameState.activePlayer);
     });
@@ -258,9 +265,8 @@ io.on('connection', (socket) => {
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
 
-        if (isRateLimited(pData)) return; // Rate Limit
+        if (isRateLimited(pData)) return; 
 
-        // Validate data types
         if (typeof data.marbleId !== 'number') return;
         if (typeof data.moveType !== 'string') return;
 
@@ -277,7 +283,6 @@ io.on('connection', (socket) => {
         
         if (socket.id === hostSocketId) {
             hostSocketId = connectedSockets.size > 0 ? connectedSockets.values().next().value : null;
-            // Try to assign ready to new host if in lobby
             if (!gameState && hostSocketId) {
                 let newHostEntry = Object.entries(players).find(([k, v]) => v && v.id === hostSocketId);
                 if(newHostEntry) players[newHostEntry[0]].ready = true;
@@ -380,6 +385,7 @@ function performMakeMove(playerId, marbleId, moveType) {
         
         let victim = gameState.marbles.find(m => m.id !== marbleId && gameLogic.samePos(m.pos, chosenMove.dest));
         if (victim) {
+            // Include Victim ID for correct Splat color
             io.emit('murder', { pos: victim.pos, victimId: victim.player }); 
             let pData = gameLogic.players[victim.player - 1];
             let emptyWork = pData.work.find(w => !gameState.marbles.some(m => gameLogic.samePos(m.pos, w)));
