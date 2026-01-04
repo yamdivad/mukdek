@@ -65,8 +65,16 @@ io.on('connection', (socket) => {
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
         for (let i = 1; i <= 4; i++) {
             if (players[i] === null) {
-                // Default name is P1, P2, etc. until changed
-                players[i] = { id: socket.id, session: sessionId, color: null, name: `P${i}` }; 
+                // Initialize with ready: false (unless P1, usually host is implicitly ready but we track it)
+                players[i] = { 
+                    id: socket.id, 
+                    session: sessionId, 
+                    color: null, 
+                    name: `P${i}`,
+                    ready: false 
+                }; 
+                // If this became Player 1, they are the host and effectively "ready" to start
+                if (i === 1) players[i].ready = true;
                 break;
             }
         }
@@ -78,6 +86,9 @@ io.on('connection', (socket) => {
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
+
+        // If player is already "ready", don't allow changes (simple lock)
+        // if (players[pid].ready && pid != 1) return; 
 
         let safeName = [...(nameInput || "")].slice(0, 3).join('');
         if (safeName.length === 0) safeName = `P${pid}`; 
@@ -91,9 +102,23 @@ io.on('connection', (socket) => {
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
         let pid = pEntry[0];
+        
+        // if (players[pid].ready && pid != 1) return;
+
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
         players[pid].color = hex;
+        io.emit('lobbyUpdate', getLobbyState());
+    });
+
+    // NEW: Player Ready Toggle
+    socket.on('playerReady', () => {
+        if (gameState) return;
+        let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
+        if (!pEntry) return;
+        
+        let pid = pEntry[0];
+        players[pid].ready = true;
         io.emit('lobbyUpdate', getLobbyState());
     });
 
@@ -101,9 +126,12 @@ io.on('connection', (socket) => {
         if (socket.id !== hostSocketId) return;
         let seatedPlayers = Object.entries(players).filter(([k, v]) => v !== null);
         let activeCount = seatedPlayers.length;
-        let allReady = seatedPlayers.every(([k, v]) => v.color !== null);
+        let allColors = seatedPlayers.every(([k, v]) => v.color !== null);
 
-        if (activeCount >= 2 && allReady && !gameState) {
+        // Optional: Enforce that all seated players must be ready? 
+        // For now, we trust the host to check the visual indicators.
+        
+        if (activeCount >= 2 && allColors && !gameState) {
             console.log(`Starting game with ${activeCount} players.`);
             totalPlayersAtStart = activeCount;
             
@@ -135,6 +163,12 @@ io.on('connection', (socket) => {
         console.log("Game Reset requested.");
         gameState = null;
         lightningMode = false; 
+        
+        // Reset readiness on new game (except Host P1)
+        for(let i=1; i<=4; i++) {
+            if(players[i]) players[i].ready = (i === 1);
+        }
+
         io.emit('lightningStatus', lightningMode);
         io.emit('gameReset');
         io.emit('lobbyUpdate', getLobbyState());
@@ -168,6 +202,9 @@ io.on('connection', (socket) => {
         }
         if (socket.id === hostSocketId) {
             hostSocketId = connectedSockets.size > 0 ? connectedSockets.values().next().value : null;
+            // New host becomes ready automatically
+            let newHostEntry = Object.entries(players).find(([k, v]) => v && v.id === hostSocketId);
+            if(newHostEntry) players[newHostEntry[0]].ready = true;
         }
         if (connectedSockets.size === 0) {
             gameDestructionTimeout = setTimeout(() => {
@@ -315,7 +352,6 @@ function performMakeMove(playerId, marbleId, moveType) {
 function triggerLightningTurn() {
     if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
-    // 50ms delay for blazing fast feeling but stable execution
     setTimeout(() => {
         if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
 
