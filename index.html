@@ -28,31 +28,33 @@
         
         /* IDENTITY HEADER */
         #identity-banner { 
+            position: relative;
             width: 100%; padding: 15px; text-align: center; font-weight: bold; font-size: 1.2em; 
             box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; transition: all 0.3s; 
             border-bottom: 2px solid rgba(0,0,0,0.1); 
             background: #d7ccc8; color: #3e2723;
+            display: flex; justify-content: center; align-items: center;
         }
         
         h1 { font-size: 1.5em; margin: 10px 0; text-shadow: none; color: #5d4037; }
         
         /* SETTINGS GEAR */
         #settings-btn {
-            position: fixed; top: 15px; right: 15px;
-            font-size: 2em; cursor: pointer; z-index: 201;
+            position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
+            font-size: 1.5em; cursor: pointer; z-index: 201;
             display: none; text-shadow: 0 2px 5px rgba(0,0,0,0.2);
             transition: transform 0.2s;
         }
-        #settings-btn:hover { transform: rotate(90deg); }
+        #settings-btn:hover { transform: translateY(-50%) rotate(90deg); }
 
         #settings-menu {
-            position: fixed; top: 60px; right: 15px;
+            position: absolute; top: 100%; right: 10px;
             background: white; padding: 15px;
-            border-radius: 10px;
+            border-radius: 0 0 10px 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
             display: none; z-index: 200;
-            border: 2px solid #5d4037;
-            width: 200px;
+            border: 2px solid #5d4037; border-top: none;
+            width: 200px; text-align: left;
         }
         #settings-menu button {
             background: #a1887f; color: white; border: none;
@@ -62,6 +64,30 @@
         }
         #btn-restart { background: #c62828 !important; }
         #btn-lightning { background: #ff9800 !important; color: #3e2723 !important; }
+
+        /* STATS BUTTON */
+        #stats-btn {
+            position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+            font-size: 1.5em; cursor: pointer; z-index: 201;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        #stats-btn:hover { transform: translateY(-50%) scale(1.1); }
+
+        /* STATS MODAL */
+        #stats-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 3000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: #eaddcf; padding: 25px; border-radius: 15px;
+            max-width: 90%; width: 400px; text-align: center;
+            border: 4px solid #5d4037; color: #3e2723;
+        }
+        .stats-table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+        .stats-table td, .stats-table th { padding: 8px; border-bottom: 1px solid #a1887f; }
+        .highlight-stat { font-weight: bold; color: #c62828; margin-top: 10px; }
 
         /* STATUS BAR */
         .status { 
@@ -80,229 +106,78 @@
             border: 1px dashed rgba(93, 64, 55, 0.3);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        
-        .player-status.active { 
-            transform: scale(1.1); z-index: 10;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            border-style: solid; border-width: 2px;
-            border-color: rgba(0,0,0,0.5); 
-        }
-        .player-status.finished { 
-            opacity: 0.9; 
-            filter: grayscale(10%); 
-        }
-        .player-status.empty-slot {
-            text-decoration: line-through;
-            opacity: 0.5;
-        }
-        
+        .player-status.active { transform: scale(1.1); z-index: 10; box-shadow: 0 4px 8px rgba(0,0,0,0.2); border-style: solid; border-width: 2px; border-color: rgba(0,0,0,0.5); }
+        .player-status.finished { opacity: 0.9; filter: grayscale(10%); }
+        .player-status.empty-slot { text-decoration: line-through; opacity: 0.5; }
         .player-status strong { display: block; font-size: 1.2em; }
         .home-count { font-size: 0.9em; opacity: 0.9; }
         
         /* CONTROLS */
-        #controls { 
-            margin-bottom: 10px; 
-            text-align: center; 
-            width: 100%;
-            min-height: 200px; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        #dice { 
-            font-size: 4em; 
-            cursor: pointer; 
-            margin: 5px; 
-            color: #3e2723;
-            width: 1.2em; 
-            height: 1.2em; 
-            line-height: 1.2em;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        #controls { margin-bottom: 10px; text-align: center; width: 100%; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #dice { font-size: 4em; cursor: pointer; margin: 5px; color: #3e2723; width: 1.2em; height: 1.2em; line-height: 1.2em; text-align: center; display: flex; align-items: center; justify-content: center; }
         #dice.rolling { animation: roll 0.6s ease-in-out; }
         @keyframes roll { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .btn-base {
-            display: block; width: 80%; max-width: 300px; margin: 5px auto; padding: 15px; 
-            font-size: 1.3em; font-weight: bold; color: white; border: none; border-radius: 50px; 
-            cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        }
+        .btn-base { display: block; width: 80%; max-width: 300px; margin: 5px auto; padding: 15px; font-size: 1.3em; font-weight: bold; color: white; border: none; border-radius: 50px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
         #roll-btn { background: #a1887f; cursor: not-allowed; }
         #roll-btn.my-turn { background: #2e7d32; cursor: pointer; animation: pulse 1.5s infinite; }
         #roll-btn.game-over { background: #d32f2f; cursor: pointer; animation: none; }
         #ready-btn { background: #0277bd; margin-top: 10px; }
+        #claim-host-btn { background: #7b1fa2; margin-top: 15px; font-size: 1em; padding: 10px; display: none; }
         
-        /* NEW: Claim Host Button */
-        #claim-host-btn { 
-            background: #7b1fa2; 
-            margin-top: 15px; 
-            font-size: 1em; 
-            padding: 10px;
-            display: none; 
-        }
-        
-        /* LOBBY / COLOR SELECTION */
-        #lobby-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(62, 39, 35, 0.98); 
-            z-index: 2000;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            overflow-y: auto; padding: 20px;
-        }
+        /* LOBBY */
+        #lobby-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(62, 39, 35, 0.98); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; padding: 20px; }
         .lobby-content { width: 100%; max-width: 500px; text-align: center; }
-        
         .color-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin: 20px 0; }
-        .color-btn {
-            width: 60px; height: 60px; border-radius: 50%; 
-            border: 4px solid rgba(255,255,255,0.2);
-            cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
-            position: relative;
-        }
+        .color-btn { width: 60px; height: 60px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.2); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; position: relative; }
         .color-btn:hover:not(:disabled) { transform: scale(1.1); border-color: white; }
         .color-btn.selected { transform: scale(1.2); border-color: white; box-shadow: 0 0 15px gold; z-index: 2; }
         .color-btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(80%); }
-
-        /* NAME INPUT */
-        #name-input {
-            width: 60%; padding: 10px; margin-bottom: 20px; 
-            text-align: center; font-size: 1.5em; 
-            border-radius: 10px; border: none; text-transform: uppercase;
-        }
+        #name-input { width: 60%; padding: 10px; margin-bottom: 20px; text-align: center; font-size: 1.5em; border-radius: 10px; border: none; text-transform: uppercase; }
         #name-input:disabled { background: #ddd; color: #555; }
-        
         #start-btn { background: #ff6f00; margin-top: 20px; opacity: 0.5; pointer-events: none; color: white; }
         #start-btn.ready { opacity: 1; pointer-events: all; }
         #join-btn { background: #2e7d32; }
-
-        /* Lobby Ready Tracker & Kick Button */
-        #ready-tracker {
-            display: flex; justify-content: center; gap: 20px; margin: 15px 0;
-        }
-        .tracker-slot {
-            width: 40px; height: 40px; border-radius: 50%;
-            border: 2px dashed rgba(255,255,255,0.3);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.2em; color: white;
-            transition: all 0.3s;
-            position: relative; /* For kick button positioning */
-        }
+        #ready-tracker { display: flex; justify-content: center; gap: 20px; margin: 15px 0; }
+        .tracker-slot { width: 40px; height: 40px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 1.2em; color: white; transition: all 0.3s; position: relative; }
         .tracker-slot.joined { border-style: solid; opacity: 0.6; }
         .tracker-slot.ready { opacity: 1; box-shadow: 0 0 10px white; border-color: white; font-weight: bold; }
-        
-        /* Kick Button Style */
-        .kick-btn {
-            position: absolute;
-            top: -10px;
-            right: -10px;
-            background: red;
-            color: white;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            font-size: 12px;
-            border: 1px solid white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
+        .kick-btn { position: absolute; top: -10px; right: -10px; background: red; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 12px; border: 1px solid white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         .kick-btn:hover { transform: scale(1.2); }
 
         /* BOARD */
-        #board-container { 
-            position: relative; 
-            width: 95vmin; height: 95vmin; 
-            max-width: 600px; max-height: 600px; 
-            margin: 10px auto; 
-            border: 8px solid #5d4037; 
-            background: #eaddcf; 
-            overflow: hidden; 
-            transition: transform 1.5s cubic-bezier(0.25, 1, 0.5, 1); 
-        }
+        #board-container { position: relative; width: 95vmin; height: 95vmin; max-width: 600px; max-height: 600px; margin: 10px auto; border: 8px solid #5d4037; background: #eaddcf; overflow: hidden; transition: transform 1.5s cubic-bezier(0.25, 1, 0.5, 1); }
         #board { display: grid; grid-template-columns: repeat(17, 1fr); grid-template-rows: repeat(17, 1fr); gap: 0; width: 100%; height: 100%; background: transparent; padding: 1px; }
         .cell { background: transparent; position: relative; border-radius: 2px; }
-        
         .track { background: #5d4037; border: 1px solid #4e342e; } 
         .shortcut { background: #009688; border: 2px solid #004d40; }
         .work, .home { background: #8d6e63; border: 1px solid #5d4037; opacity: 0.8; }
         
         /* MARBLES */
-        .marble { 
-            width: 4.5%; height: 4.5%;
-            border-radius: 50%; position: absolute; z-index: 20; 
-            box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.6); 
-            border: 2px solid rgba(255,255,255,0.8); 
-            transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s;
-        }
+        .marble { width: 4.5%; height: 4.5%; border-radius: 50%; position: absolute; z-index: 20; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.6); border: 2px solid rgba(255,255,255,0.8); transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s; }
         .marble[data-color="#ffffff"] { border: 2px solid #999; }
         .marble.movable { z-index: 100; cursor: pointer; filter: drop-shadow(0 0 5px gold); }
-        .marble.movable::after {
-            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-            border-radius: 50%; border: 2px solid white; opacity: 0;
-            animation: ringPulse 1.5s infinite;
-        }
+        .marble.movable::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; border-radius: 50%; border: 2px solid white; opacity: 0; animation: ringPulse 1.5s infinite; }
         @keyframes ringPulse { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(1.2); opacity: 0; } }
-
-        /* GHOST MARBLE */
-        .ghost-marble {
-            width: 4.5%; height: 4.5%;
-            border-radius: 50%; position: absolute; z-index: 15; /* Below real marble, above board */
-            opacity: 0.5;
-            border: 2px dashed rgba(255,255,255,0.8);
-            pointer-events: none; /* Let clicks pass through to board if needed */
-            transition: all 0.2s;
-            animation: ghostPulse 1s infinite alternate;
-        }
+        .ghost-marble { width: 4.5%; height: 4.5%; border-radius: 50%; position: absolute; z-index: 15; opacity: 0.5; border: 2px dashed rgba(255,255,255,0.8); pointer-events: none; transition: all 0.2s; animation: ghostPulse 1s infinite alternate; }
         @keyframes ghostPulse { 0% { transform: scale(0.9); opacity: 0.4; } 100% { transform: scale(1.0); opacity: 0.7; } }
-
-        .splat {
-            position: absolute; width: 5.5%; height: 5.5%;
-            background: radial-gradient(circle, #b71c1c 40%, transparent 70%);
-            border-radius: 50%; z-index: 10; pointer-events: none;
-            clip-path: polygon(20% 0%, 30% 20%, 50% 0%, 60% 25%, 90% 5%, 80% 40%, 100% 50%, 80% 60%, 95% 85%, 60% 75%, 50% 100%, 40% 75%, 10% 90%, 25% 60%, 0% 50%, 25% 40%);
-            animation: fadeSplat 2s forwards;
-        }
+        
+        /* SPLAT */
+        .splat { position: absolute; width: 5.5%; height: 5.5%; border-radius: 50%; z-index: 10; pointer-events: none; clip-path: polygon(20% 0%, 30% 20%, 50% 0%, 60% 25%, 90% 5%, 80% 40%, 100% 50%, 80% 60%, 95% 85%, 60% 75%, 50% 100%, 40% 75%, 10% 90%, 25% 60%, 0% 50%, 25% 40%); animation: fadeSplat 2s forwards; }
         @keyframes fadeSplat { 0% { opacity: 1; transform: scale(0); } 10% { transform: scale(1.5) rotate(10deg); } 100% { opacity: 0; transform: scale(1.5) rotate(20deg); } }
 
         /* MODALS */
-        #shortcut-modal {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);
-            width: 80%; max-width: 300px; background: rgba(62, 39, 35, 0.95);
-            border: 2px solid #d7ccc8; border-radius: 15px; padding: 20px; text-align: center;
-            z-index: 500; box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: transform 0.3s; pointer-events: none; opacity: 0;
-            color: white;
-        }
+        #shortcut-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0); width: 80%; max-width: 300px; background: rgba(62, 39, 35, 0.95); border: 2px solid #d7ccc8; border-radius: 15px; padding: 20px; text-align: center; z-index: 500; box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: transform 0.3s; pointer-events: none; opacity: 0; color: white; }
         #shortcut-modal.active { transform: translate(-50%, -50%) scale(1); pointer-events: all; opacity: 1; }
         .modal-btn { padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; margin: 5px; font-size: 1.1em; }
         .btn-yes { background: #2e7d32; color: white; }
         .btn-no { background: #c62828; color: white; }
 
-        #target-pop {
-            position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0);
-            background: rgba(198, 40, 40, 0.95); color: white; padding: 30px; border-radius: 50px;
-            font-size: 2em; font-weight: 900; text-transform: uppercase;
-            box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 1000;
-            text-shadow: 2px 2px 0px #b71c1c; pointer-events: none;
-            transition: transform 0.4s; text-align: center; border: 4px solid white;
-        }
+        #target-pop { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0); background: rgba(198, 40, 40, 0.95); color: white; padding: 30px; border-radius: 50px; font-size: 2em; font-weight: 900; text-transform: uppercase; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 1000; text-shadow: 2px 2px 0px #b71c1c; pointer-events: none; transition: transform 0.4s; text-align: center; border: 4px solid white; }
         #target-pop.active { transform: translate(-50%, -50%) scale(1); animation: shake 0.5s infinite; }
         #target-pop span { display: block; font-size: 0.5em; font-weight: normal; margin-top: 5px; opacity: 0.9; }
         
-        #lightning-pop {
-            position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0);
-            background: rgba(255, 179, 0, 0.95); color: #3e2723; padding: 30px; border-radius: 50px;
-            font-size: 2em; font-weight: 900; text-transform: uppercase;
-            box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 1001;
-            text-shadow: 1px 1px 0px rgba(255,255,255,0.5); pointer-events: none;
-            transition: transform 0.4s; text-align: center; border: 4px solid white;
-        }
+        #lightning-pop { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%) scale(0); background: rgba(255, 179, 0, 0.95); color: #3e2723; padding: 30px; border-radius: 50px; font-size: 2em; font-weight: 900; text-transform: uppercase; box-shadow: 0 0 30px rgba(0,0,0,0.5); z-index: 1001; text-shadow: 1px 1px 0px rgba(255,255,255,0.5); pointer-events: none; transition: transform 0.4s; text-align: center; border: 4px solid white; }
         #lightning-pop.active { transform: translate(-50%, -50%) scale(1); animation: shake 0.5s infinite; }
 
         @keyframes shake { 0%, 100% { transform: translate(-50%, -50%) rotate(0deg); } 25% { transform: translate(-50%, -50%) rotate(-5deg); } 75% { transform: translate(-50%, -50%) rotate(5deg); } }
@@ -345,15 +220,25 @@
         </div>
     </div>
 
-    <div id="settings-btn" onclick="toggleSettings()">⚙️</div>
-    <div id="settings-menu">
-        <button id="btn-lightning" onclick="toggleLightning()">ENABLE LIGHTNING</button>
-        <button id="btn-restart" onclick="triggerReset()">RESTART GAME</button>
+    <div id="identity-banner">
+        <div id="stats-btn" onclick="toggleStats()">📊</div>
+        <span id="identity-text">Spectating...</span>
+        <div id="settings-btn" onclick="toggleSettings()">⚙️</div>
+        <div id="settings-menu">
+            <button id="btn-lightning" onclick="toggleLightning()">ENABLE LIGHTNING</button>
+            <button id="btn-restart" onclick="triggerReset()">RESTART GAME</button>
+        </div>
     </div>
 
-    <div id="identity-banner">Spectating...</div>
+    <div id="stats-overlay" class="modal-overlay" onclick="toggleStats()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h2>Game Stats</h2>
+            <div id="stats-body">Waiting for data...</div>
+            <button class="btn-base" onclick="toggleStats()" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
+        </div>
+    </div>
+
     <div id="target-pop">TARGET!<br>TARGET!<br>TARGET!<span id="target-name">PLAYER X IS LEADING</span></div>
-    
     <div id="lightning-pop">LIGHTNING MODE<br>ACTIVATED!</div>
 
     <h1>Mukdek</h1>
@@ -399,8 +284,8 @@
         
         let isLightningMode = false;
         
-        // Track celebrated players to prevent duplicate confetti
         let celebratedPlayers = new Set();
+        let isFirstRender = true;
 
         const faviconLink = document.getElementById("dynamic-favicon");
         const originalFavicon = "favicon.svg";
@@ -439,6 +324,7 @@
         const startBtn = document.getElementById('start-btn');
         const readyBtn = document.getElementById('ready-btn');
         const claimHostBtn = document.getElementById('claim-host-btn');
+        const bannerText = document.getElementById('identity-text');
         const banner = document.getElementById('identity-banner');
         const targetPop = document.getElementById('target-pop');
         const targetName = document.getElementById('target-name');
@@ -448,6 +334,8 @@
         const btnLightning = document.getElementById('btn-lightning');
         const nameInput = document.getElementById('name-input');
         const lightningPop = document.getElementById('lightning-pop');
+        const statsOverlay = document.getElementById('stats-overlay');
+        const statsBody = document.getElementById('stats-body');
 
         let pendingShortcutMarbleId = null;
         
@@ -473,6 +361,10 @@
 
         function toggleSettings() {
             settingsMenu.style.display = (settingsMenu.style.display === 'block') ? 'none' : 'block';
+        }
+
+        function toggleStats() {
+            statsOverlay.style.display = (statsOverlay.style.display === 'flex') ? 'none' : 'flex';
         }
 
         function triggerReset() {
@@ -574,7 +466,6 @@
         }
 
         socket.on('lobbyUpdate', (state) => {
-            // Update Tracker Marbles & Kick Buttons
             for(let i=1; i<=4; i++) {
                 let tk = document.getElementById(`tk-${i}`);
                 let pData = state.players[i];
@@ -594,7 +485,6 @@
                         tk.innerHTML = '';
                     }
                     
-                    // Show kick button if I am Host (P1) and this slot is not me
                     if (myPlayerId === 1 && i !== 1) {
                         let kickBtn = document.createElement('div');
                         kickBtn.className = 'kick-btn';
@@ -624,12 +514,11 @@
                     nameInput.value = pData.name.replace(/^P\d$/, ''); 
                 }
 
-                // Lock Inputs logic
                 if (isMeReady && myPlayerId !== 1) { 
                     nameInput.disabled = true;
                     readyBtn.style.display = 'block';
                     readyBtn.textContent = "CHANGE";
-                    readyBtn.style.background = "#757575"; // Grey
+                    readyBtn.style.background = "#757575"; 
                     readyBtn.onclick = () => clickReady(false);
                     document.getElementById('lobby-msg').textContent = "Ready! Waiting for host...";
                 } else {
@@ -637,7 +526,7 @@
                     if (myPlayerId !== 1) {
                         readyBtn.style.display = 'block';
                         readyBtn.textContent = "I'M READY";
-                        readyBtn.style.background = "#0277bd"; // Blue
+                        readyBtn.style.background = "#0277bd"; 
                         readyBtn.onclick = () => clickReady(true);
                         document.getElementById('lobby-msg').textContent = "Pick color/initials, then click Ready.";
                     }
@@ -711,7 +600,6 @@
             location.reload();
         });
 
-        // Helper for Ghost Placement
         function getPosStyle(col, row) {
             let cellPct = 100/17; 
             let centerX = (col * cellPct) + (cellPct/2);
@@ -720,6 +608,35 @@
                 left: `calc(${centerX}% - 2.25%)`,
                 top: `calc(${centerY}% - 2.25%)`
             };
+        }
+
+        function showGhost(mid) {
+            let movesPair = currentGameState.possibleMoves.find(pm => pm[0] === mid);
+            if (!movesPair) return;
+            
+            let moves = movesPair[1];
+            moves.forEach(move => {
+                let ghost = document.createElement('div');
+                ghost.className = `ghost-marble ghost-${mid}`;
+                let posStyle = getPosStyle(move.dest.col, move.dest.row);
+                ghost.style.left = posStyle.left;
+                ghost.style.top = posStyle.top;
+                
+                let pColor = gameColors[myPlayerId] || '#999';
+                ghost.style.backgroundColor = pColor;
+                
+                container.appendChild(ghost);
+            });
+        }
+
+        function hideGhost(mid) {
+            let ghosts = document.querySelectorAll(`.ghost-${mid}`);
+            ghosts.forEach(g => g.remove());
+        }
+
+        function clearAllGhosts() {
+            let ghosts = document.querySelectorAll('.ghost-marble');
+            ghosts.forEach(g => g.remove());
         }
 
         function initBoard() {
@@ -746,7 +663,7 @@
 
         function updateIdentity(pid, colorHex, pName) {
             if(!pid) return;
-            banner.textContent = `YOU ARE ${pName || 'PLAYER ' + pid}`;
+            bannerText.textContent = `YOU ARE ${pName || 'PLAYER ' + pid}`;
             banner.style.backgroundColor = colorHex;
             banner.style.color = getContrastColor(colorHex);
 
@@ -784,7 +701,10 @@
             }
         }
 
-        // Consolidated Popup Function
+        function triggerTargetPopup(pid) {
+            triggerPopup(pid, "IS LEADING!");
+        }
+
         function triggerPopup(pid, suffix) {
             let pColor = gameColors[pid] || '#999';
             let pName = (currentGameState.playerNames && currentGameState.playerNames[pid]) || `PLAYER ${pid}`;
@@ -792,30 +712,46 @@
             targetPop.style.backgroundColor = pColor;
             targetPop.style.color = getContrastColor(pColor);
             
-            // Reset animation
             targetPop.classList.remove('active');
-            void targetPop.offsetWidth; // trigger reflow
+            void targetPop.offsetWidth; 
             targetPop.classList.add('active');
             
             setTimeout(() => { targetPop.classList.remove('active'); }, 3000); 
         }
 
-        // Updated Helper for "Leader"
-        function triggerTargetPopup(pid) {
-            triggerPopup(pid, "IS LEADING!");
+        function renderStats(stats, names) {
+            if (!stats) return;
+            let html = '<table class="stats-table"><tr><th>Player</th><th>Taken Others</th><th>Been Taken</th></tr>';
+            
+            let maxKills = -1; let killer = null;
+            let maxDeaths = -1; let victim = null;
+
+            for(let i=1; i<=4; i++) {
+                if(!names[i]) continue; // Skip unseated
+                let kills = stats.murders[i] || 0;
+                let deaths = stats.deaths[i] || 0;
+                html += `<tr><td>${names[i]}</td><td>${kills}</td><td>${deaths}</td></tr>`;
+                
+                if (kills > maxKills) { maxKills = kills; killer = names[i]; }
+                if (deaths > maxDeaths) { maxDeaths = deaths; victim = names[i]; }
+            }
+            html += '</table>';
+            
+            if (maxKills > 0) html += `<div class="highlight-stat">Most Ruthless: ${killer} (${maxKills})</div>`;
+            if (maxDeaths > 0) html += `<div class="highlight-stat">Most Targeted: ${victim} (${maxDeaths})</div>`;
+            
+            statsBody.innerHTML = html;
         }
 
-        socket.on('murder', (pos) => {
+        socket.on('murder', (data) => {
             let splat = document.createElement('div');
             splat.className = 'splat';
-            // NEW: Use splat color based on victim
-            let victimColor = gameColors[pos.victimId] || '#b71c1c';
-            // Need to update CSS dynamically or inline style
+            let victimColor = gameColors[data.victimId] || '#b71c1c';
             splat.style.background = `radial-gradient(circle, ${victimColor} 40%, transparent 70%)`;
 
             let cellPct = 100/17; 
-            let centerX = (pos.col * cellPct) + (cellPct/2);
-            let centerY = (pos.row * cellPct) + (cellPct/2);
+            let centerX = (data.pos.col * cellPct) + (cellPct/2);
+            let centerY = (data.pos.row * cellPct) + (cellPct/2);
             splat.style.left = `calc(${centerX}% - 2.75%)`; 
             splat.style.top = `calc(${centerY}% - 2.75%)`;
             container.appendChild(splat);
@@ -823,29 +759,26 @@
         });
 
         function renderState(state) {
+            clearAllGhosts();
+
             currentGameState = state;
             gameColors = state.playerColors || {};
             
-            // --- CONFETTI & WINNER CHECK ---
+            renderStats(state.stats, state.playerNames);
+
             state.finishedPlayers.forEach((pid, index) => {
                 if (gameColors[pid]) { 
                     if (!celebratedPlayers.has(pid)) {
                         celebratedPlayers.add(pid);
                         
-                        // Trigger Confetti
-                        confetti({
-                            particleCount: 150,
-                            spread: 70,
-                            origin: { y: 0.6 }
-                        });
-
-                        // NEW: Winner Popup for 1st Place
-                        if (index === 0) {
-                             triggerPopup(pid, "IS THE WINNER!");
+                        if (!isFirstRender) {
+                            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                            if (index === 0) triggerPopup(pid, "IS THE WINNER!");
                         }
                     }
                 }
             });
+            isFirstRender = false;
 
             if (state.phase === 'play') {
                 if (state.activePlayer === myPlayerId) {
@@ -875,11 +808,16 @@
                 updateFavicon(false); 
             }
 
+            // --- SETTINGS BUTTON VISIBILITY UPDATE ---
+            // Re-query elements because renderState runs often
+            const sBtn = document.getElementById('settings-btn');
+            const sMenu = document.getElementById('settings-menu');
+            
             if (myPlayerId === 1 && state.phase !== 'gameover') {
-                settingsBtn.style.display = 'block';
+                if(sBtn) sBtn.style.display = 'block';
             } else {
-                settingsBtn.style.display = 'none';
-                settingsMenu.style.display = 'none';
+                if(sBtn) sBtn.style.display = 'none';
+                if(sMenu) sMenu.style.display = 'none';
             }
             
             document.getElementById('message').textContent = state.message;
@@ -998,7 +936,6 @@
                     el.classList.add('movable');
                     el.onclick = () => handleMarbleClick(m.id);
                     
-                    // GHOST MOVES
                     el.onmouseenter = () => showGhost(m.id);
                     el.onmouseleave = () => hideGhost(m.id);
                 } else {
@@ -1023,32 +960,9 @@
             });
         }
 
-        // --- GHOST HELPERS ---
-        function showGhost(mid) {
-            let movesPair = currentGameState.possibleMoves.find(pm => pm[0] === mid);
-            if (!movesPair) return;
-            
-            let moves = movesPair[1];
-            moves.forEach(move => {
-                let ghost = document.createElement('div');
-                ghost.className = `ghost-marble ghost-${mid}`;
-                let posStyle = getPosStyle(move.dest.col, move.dest.row);
-                ghost.style.left = posStyle.left;
-                ghost.style.top = posStyle.top;
-                
-                let pColor = gameColors[myPlayerId] || '#999';
-                ghost.style.backgroundColor = pColor;
-                
-                container.appendChild(ghost);
-            });
-        }
-
-        function hideGhost(mid) {
-            let ghosts = document.querySelectorAll(`.ghost-${mid}`);
-            ghosts.forEach(g => g.remove());
-        }
-
         function handleMarbleClick(mid) {
+            clearAllGhosts();
+
             let movesPair = currentGameState.possibleMoves.find(pm => pm[0] === mid);
             if (!movesPair) return;
             let moves = movesPair[1];

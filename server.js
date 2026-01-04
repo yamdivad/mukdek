@@ -156,23 +156,15 @@ io.on('connection', (socket) => {
         io.emit('lobbyUpdate', getLobbyState());
     });
 
-    // --- KICK PLAYER ---
     socket.on('kickPlayer', (targetPid) => {
-        // Only Host (P1) can kick
         if (socket.id !== hostSocketId) return;
-        
-        // Cannot kick self
         if (targetPid === 1) return;
 
         if (players[targetPid]) {
             let socketId = players[targetPid].id;
             players[targetPid] = null;
             console.log(`Host kicked Player ${targetPid}`);
-            
-            // Notify the kicked player to reload
             io.to(socketId).emit('kicked');
-            
-            // Update everyone else
             io.emit('lobbyUpdate', getLobbyState());
         }
     });
@@ -206,6 +198,12 @@ io.on('connection', (socket) => {
 
             gameState = gameLogic.initServerState(colorMap);
             gameState.playerNames = nameMap;
+            
+            // Initialize Stats
+            gameState.stats = {
+                murders: { 1: 0, 2: 0, 3: 0, 4: 0 },
+                deaths: { 1: 0, 2: 0, 3: 0, 4: 0 }
+            };
 
             let firstActive = parseInt(seatedPlayers[0][0]);
             gameState.activePlayer = firstActive;
@@ -385,7 +383,12 @@ function performMakeMove(playerId, marbleId, moveType) {
         
         let victim = gameState.marbles.find(m => m.id !== marbleId && gameLogic.samePos(m.pos, chosenMove.dest));
         if (victim) {
-            // Include Victim ID for correct Splat color
+            // Track Stats
+            if (gameState.stats) {
+                gameState.stats.murders[playerId] = (gameState.stats.murders[playerId] || 0) + 1;
+                gameState.stats.deaths[victim.player] = (gameState.stats.deaths[victim.player] || 0) + 1;
+            }
+
             io.emit('murder', { pos: victim.pos, victimId: victim.player }); 
             let pData = gameLogic.players[victim.player - 1];
             let emptyWork = pData.work.find(w => !gameState.marbles.some(m => gameLogic.samePos(m.pos, w)));
