@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Mukdek</title>
     
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" id="dynamic-favicon">
 
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -323,9 +323,16 @@
         
         let lastActivePlayer = null; 
         const turnAudio = document.getElementById('turn-audio');
+        let turnSoundTimeout = null;
         
         // Global Lightning State
         let isLightningMode = false;
+
+        // FAVICON ELEMENTS
+        const faviconLink = document.getElementById("dynamic-favicon");
+        const originalFavicon = "favicon.svg";
+        // Simple "GO" Icon Data URI (Green background, white text)
+        const goFavicon = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22><rect width=%22512%22 height=%22512%22 rx=%22100%22 fill=%22%232ecc71%22/><text x=%2250%25%22 y=%2255%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-weight=%22900%22 font-size=%22300%22 fill=%22white%22>GO</text></svg>";
 
         document.body.addEventListener('click', () => {
             turnAudio.play().then(() => {
@@ -392,6 +399,15 @@
             toggleSettings();
         }
 
+        // Update Favicon Helper
+        function updateFavicon(isTurn) {
+            if (isTurn) {
+                faviconLink.href = goFavicon;
+            } else {
+                faviconLink.href = originalFavicon;
+            }
+        }
+
         socket.on('lightningStatus', (isOn) => {
             // Update Global State
             isLightningMode = isOn;
@@ -409,6 +425,9 @@
                 void lightningPop.offsetWidth; 
                 lightningPop.classList.add('active');
                 setTimeout(() => { lightningPop.classList.remove('active'); }, 2000);
+
+                // Cancel any pending audio in lightning mode
+                if (turnSoundTimeout) clearTimeout(turnSoundTimeout);
 
             } else {
                 btnLightning.textContent = "ENABLE LIGHTNING";
@@ -623,18 +642,39 @@
             currentGameState = state;
             gameColors = state.playerColors || {};
             
-            // --- AUDIO LOGIC ---
-            // Only play if:
-            // 1. It is the PLAY phase
-            // 2. The active player just changed
-            // 3. I am the active player
-            // 4. Lightning Mode is OFF
+            // --- UPDATED AUDIO & FAVICON LOGIC ---
+            
+            // Check if turn changed to ME
             if (state.phase === 'play' && state.activePlayer !== lastActivePlayer) {
-                if (state.activePlayer === myPlayerId && !isLightningMode) {
-                    turnAudio.currentTime = 0;
-                    turnAudio.play().catch(e => console.log("Audio play blocked"));
+                // Clear any existing sound timer
+                if (turnSoundTimeout) clearTimeout(turnSoundTimeout);
+
+                if (state.activePlayer === myPlayerId) {
+                    // Update Favicon to "GO"
+                    updateFavicon(true);
+
+                    // Setup 10-second delayed sound IF not in lightning mode
+                    if (!isLightningMode) {
+                        turnSoundTimeout = setTimeout(() => {
+                            turnAudio.currentTime = 0;
+                            turnAudio.play().catch(e => console.log("Audio blocked"));
+                        }, 10000); // 10 seconds
+                    }
+                } else {
+                    // Not my turn
+                    updateFavicon(false);
                 }
                 lastActivePlayer = state.activePlayer;
+            }
+
+            // Safety check: if active player is NOT me anymore, ensure sound is cleared
+            // (e.g. I moved in 2 seconds)
+            if (state.activePlayer !== myPlayerId) {
+                if (turnSoundTimeout) {
+                    clearTimeout(turnSoundTimeout);
+                    turnSoundTimeout = null;
+                }
+                updateFavicon(false); // Ensure regular favicon
             }
 
             if (myPlayerId === 1 && state.phase !== 'gameover') {
@@ -653,7 +693,6 @@
                 let pColor = gameColors[i];
                 let pName = (state.playerNames && state.playerNames[i]) || `P${i}`;
                 
-                // --- MEDAL & RANK LOGIC ---
                 let isRealPlayer = !!pColor;
 
                 if (!isRealPlayer) {
