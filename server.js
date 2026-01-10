@@ -19,6 +19,7 @@ let totalPlayersAtStart = 0;
 let gameDestructionTimeout = null;
 
 let lightningMode = false;
+let botTimeout = null; // Track bot timer to clear on reset
 
 // --- SECURITY HELPERS ---
 function sanitizeString(str) {
@@ -39,6 +40,14 @@ function isRateLimited(playerObj) {
     playerObj.lastAction = now;
     return false;
 }
+
+// --- BOT COLORS ---
+const BOT_COLORS = {
+    1: '#e74c3c', // Red
+    2: '#2ecc71', // Green
+    3: '#f1c40f', // Yellow
+    4: '#3498db'  // Blue
+};
 
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
@@ -63,7 +72,7 @@ io.on('connection', (socket) => {
     socket.on('register', (sessionId) => {
         if (typeof sessionId !== 'string') return;
 
-        let returningPlayerEntry = Object.entries(players).find(([k, v]) => v && v.session === sessionId);
+        let returningPlayerEntry = Object.entries(players).find(([k, v]) => v && v.session === sessionId && !v.isBot);
         if (returningPlayerEntry) {
             let pid = returningPlayerEntry[0];
             players[pid].id = socket.id;
@@ -98,7 +107,8 @@ io.on('connection', (socket) => {
                     color: null, 
                     name: `P${i}`,
                     ready: false,
-                    lastAction: 0 
+                    lastAction: 0,
+                    isBot: false
                 }; 
                 if (i === 1) {
                     players[i].ready = true;
@@ -110,6 +120,36 @@ io.on('connection', (socket) => {
         io.emit('lobbyUpdate', getLobbyState());
     });
 
+    // --- BOT MANAGEMENT ---
+    socket.on('addBot', (seatIndex) => {
+        if (gameState) return;
+        if (socket.id !== hostSocketId) return; // Only host can add bots
+        
+        let pid = seatIndex + 1;
+        if (players[pid] === null) {
+            players[pid] = {
+                id: 'BOT-' + pid,
+                session: 'BOT-' + pid,
+                color: BOT_COLORS[pid],
+                name: `BOT ${pid}`,
+                ready: true,
+                isBot: true
+            };
+            io.emit('lobbyUpdate', getLobbyState());
+        }
+    });
+
+    socket.on('removeBot', (seatIndex) => {
+        if (gameState) return;
+        if (socket.id !== hostSocketId) return;
+
+        let pid = seatIndex + 1;
+        if (players[pid] && players[pid].isBot) {
+            players[pid] = null;
+            io.emit('lobbyUpdate', getLobbyState());
+        }
+    });
+
     socket.on('setName', (nameInput) => {
         if (gameState) return; 
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
@@ -117,6 +157,7 @@ io.on('connection', (socket) => {
         let pid = pEntry[0];
         let pData = players[pid];
 
+        if (pData.isBot) return; // Cannot rename bots
         if (isRateLimited(pData)) return; 
 
         let cleanName = sanitizeString(nameInput);
@@ -134,6 +175,7 @@ io.on('connection', (socket) => {
         let pid = pEntry[0];
         let pData = players[pid];
 
+        if (pData.isBot) return;
         if (isRateLimited(pData)) return; 
         if (!isValidHex(hex)) return;
 
@@ -150,6 +192,7 @@ io.on('connection', (socket) => {
         if (!pEntry) return;
         
         let pid = pEntry[0];
+        if (players[pid].isBot) return; 
         if (isRateLimited(players[pid])) return;
 
         players[pid].ready = !!status; 
@@ -161,10 +204,14 @@ io.on('connection', (socket) => {
         if (targetPid === 1) return;
 
         if (players[targetPid]) {
+            // Can kick bots too, just simpler
+            let isBot = players[targetPid].isBot;
             let socketId = players[targetPid].id;
             players[targetPid] = null;
-            console.log(`Host kicked Player ${targetPid}`);
-            io.to(socketId).emit('kicked');
+            
+            if (!isBot) {
+                io.to(socketId).emit('kicked');
+            }
             io.emit('lobbyUpdate', getLobbyState());
         }
     });
@@ -199,7 +246,6 @@ io.on('connection', (socket) => {
             gameState = gameLogic.initServerState(colorMap);
             gameState.playerNames = nameMap;
             
-            // Initialize Stats
             gameState.stats = {
                 murders: { 1: 0, 2: 0, 3: 0, 4: 0 },
                 deaths: { 1: 0, 2: 0, 3: 0, 4: 0 }
@@ -214,7 +260,9 @@ io.on('connection', (socket) => {
 
             io.emit('gameStart');
             broadcastGameState();
-            triggerLightningTurn();
+            
+            // Check if first player is a bot
+            triggerBotTurn();
         }
     });
 
@@ -225,11 +273,13 @@ io.on('connection', (socket) => {
 
         console.log("Game Reset requested.");
         gameState = null;
-        lightningMode = false; 
+        lightningMode = false;
+        if(botTimeout) clearTimeout(botTimeout);
         
         for(let i=1; i<=4; i++) {
             if(players[i]) {
-                players[i].ready = (i === 1);
+                // Keep bots ready, reset humans
+                players[i].ready = players[i].isBot || (i === 1);
                 players[i].lastAction = 0;
             }
         }
@@ -245,16 +295,22 @@ io.on('connection', (socket) => {
 
         lightningMode = !lightningMode;
         io.emit('lightningStatus', lightningMode);
-        if (lightningMode) triggerLightningTurn();
+        
+        // If it's currently a bot's turn, this might speed them up
+        if (players[gameState.activePlayer].isBot) {
+             triggerBotTurn();
+        } else {
+             if (lightningMode) triggerLightningTurn();
+        }
     });
     
     socket.on('rollDice', () => {
         if (!gameState) return;
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
-        
-        if (isRateLimited(pData)) return; 
+        if (pData.isBot) return; // Humans can't roll for bots
 
+        if (isRateLimited(pData)) return; 
         performRollDice(gameState.activePlayer);
     });
 
@@ -262,9 +318,9 @@ io.on('connection', (socket) => {
         if (!gameState) return;
         let pData = players[gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
+        if (pData.isBot) return;
 
         if (isRateLimited(pData)) return; 
-
         if (typeof data.marbleId !== 'number') return;
         if (typeof data.moveType !== 'string') return;
 
@@ -276,7 +332,9 @@ io.on('connection', (socket) => {
         let pEntry = Object.entries(players).find(([k, v]) => v && v.id === socket.id);
         if (pEntry) {
             let pid = pEntry[0];
-            if (!gameState) players[pid] = null;
+            if (!gameState && !players[pid].isBot) {
+                players[pid] = null;
+            }
         }
         
         if (socket.id === hostSocketId) {
@@ -296,6 +354,120 @@ io.on('connection', (socket) => {
         io.emit('lobbyUpdate', getLobbyState()); 
     });
 });
+
+// --- AI & GAME LOGIC ---
+
+function triggerBotTurn() {
+    if (!gameState || gameState.phase === 'gameover') return;
+    
+    let activeP = players[gameState.activePlayer];
+    if (!activeP || !activeP.isBot) {
+        // If human, check lightning
+        if (lightningMode) triggerLightningTurn();
+        return; 
+    }
+
+    if (botTimeout) clearTimeout(botTimeout);
+
+    // AI Delay: 2000ms normal, 50ms lightning
+    let delay = lightningMode ? 50 : 2000;
+
+    botTimeout = setTimeout(() => {
+        if (!gameState || gameState.phase === 'gameover') return;
+        if (gameState.activePlayer !== parseInt(activeP.name.replace('BOT ','').replace('P',''))) return;
+
+        // 1. Roll Dice
+        if (gameState.currentRoll === 0) {
+            performRollDice(gameState.activePlayer);
+            return;
+        }
+
+        // 2. Make Move
+        if (gameState.currentRoll > 0 && gameState.movableMarbles.length > 0) {
+            let bestMove = decideBotMove(gameState.activePlayer);
+            if (bestMove) {
+                performMakeMove(gameState.activePlayer, bestMove.marbleId, bestMove.type);
+            }
+        }
+    }, delay);
+}
+
+function decideBotMove(pid) {
+    let movesMap = gameState.possibleMoves;
+    if (movesMap.length === 0) return null;
+
+    let bestScore = -9999;
+    let bestAction = null;
+
+    // AI DECISION LOGIC
+    movesMap.forEach(([mId, moves]) => {
+        let marble = gameState.marbles.find(m => m.id === mId);
+        
+        moves.forEach(move => {
+            let score = 0;
+
+            // 1. Murder Priority
+            let victim = gameState.marbles.find(m => m.id !== mId && gameLogic.samePos(m.pos, move.dest));
+            if (victim && victim.player !== pid) {
+                score += 1000; 
+            }
+
+            // 2. Shortcut Priority
+            if (move.type === 'shortcut') score += 500;
+            
+            // 3. Spawn Priority
+            if (move.type === 'spawn') score += 200;
+
+            // 4. Furthest Along (Progress)
+            // We use a simplified progress heuristic
+            let currentProg = calculateProgress(pid, marble.pos);
+            let nextProg = calculateProgress(pid, move.dest);
+            score += (nextProg - currentProg);
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestAction = { marbleId: mId, type: move.type };
+            }
+        });
+    });
+
+    return bestAction;
+}
+
+// Simple heuristic for "How far along is this marble?"
+function calculateProgress(pid, pos) {
+    let pData = gameLogic.players[pid - 1];
+    
+    // If in Home, high score (100 + index)
+    let homeIdx = pData.home.findIndex(h => gameLogic.samePos(h, pos));
+    if (homeIdx !== -1) return 200 + homeIdx;
+
+    // If in Work, 0
+    let workIdx = pData.work.findIndex(w => gameLogic.samePos(w, pos));
+    if (workIdx !== -1) return 0;
+
+    // If on Track, find index in trackStr relative to Entry
+    // Find absolute index of pos
+    let key = gameLogic.coordToKey(pos);
+    let trackIdx = gameLogic.trackStr.indexOf(key);
+    
+    if (trackIdx !== -1) {
+        let startKey = gameLogic.coordToKey(pData.entry1);
+        let startIdx = gameLogic.trackStr.indexOf(startKey);
+        
+        // Calculate distance from start (handling wrap-around)
+        let dist = (trackIdx - startIdx + gameLogic.trackStr.length) % gameLogic.trackStr.length;
+        return 10 + dist;
+    }
+    
+    // Shortcut center (I9) is visually advanced
+    if (key === 'I9') return 100;
+
+    return 0; 
+}
+
+
+// --- CORE GAME ACTIONS ---
 
 function performRollDice(playerId) {
     if (!gameState || gameState.currentRoll > 0) return;
@@ -329,11 +501,17 @@ function performRollDice(playerId) {
             gameState.phase = 'play';
             gameState.message = `${winnerName} starts!`;
             gameState.currentRoll = 0;
+            
+            // Check if winner is bot
+            triggerBotTurn();
         } else {
             nextPlayer(); 
             const nextName = gameState.playerNames[gameState.activePlayer] || `P${gameState.activePlayer}`;
             gameState.message = `${nextName}, roll for order.`;
             gameState.currentRoll = 0;
+            
+            // Check if next roller is bot
+            triggerBotTurn();
         }
     } else {
         let movesMap = [];
@@ -353,20 +531,24 @@ function performRollDice(playerId) {
             if (roll === 6 || roll === 1) {
                 gameState.message = `Rolled ${roll}. No moves, but Roll Again!`;
                 gameState.currentRoll = 0; 
+                
+                // Bot needs to roll again
+                triggerBotTurn();
             } else {
                 gameState.message = `Rolled ${roll}. No moves.`;
                 setTimeout(() => {
                     nextPlayer();
                     broadcastGameState();
-                    triggerLightningTurn(); 
+                    triggerBotTurn(); // Pass turn to bot if needed
                 }, 1500);
             }
         } else {
             gameState.message = `Rolled ${roll}! Move a marble.`;
+            // If bot, it needs to decide now
+            triggerBotTurn();
         }
     }
     broadcastGameState();
-    triggerLightningTurn(); 
 }
 
 function performMakeMove(playerId, marbleId, moveType) {
@@ -383,12 +565,10 @@ function performMakeMove(playerId, marbleId, moveType) {
         
         let victim = gameState.marbles.find(m => m.id !== marbleId && gameLogic.samePos(m.pos, chosenMove.dest));
         if (victim) {
-            // Track Stats
             if (gameState.stats) {
                 gameState.stats.murders[playerId] = (gameState.stats.murders[playerId] || 0) + 1;
                 gameState.stats.deaths[victim.player] = (gameState.stats.deaths[victim.player] || 0) + 1;
             }
-
             io.emit('murder', { pos: victim.pos, victimId: victim.player }); 
             let pData = gameLogic.players[victim.player - 1];
             let emptyWork = pData.work.find(w => !gameState.marbles.some(m => gameLogic.samePos(m.pos, w)));
@@ -417,7 +597,7 @@ function performMakeMove(playerId, marbleId, moveType) {
                 setTimeout(() => {
                      nextPlayer();
                      broadcastGameState();
-                     triggerLightningTurn();
+                     triggerBotTurn();
                 }, 2500); 
                 return; 
             }
@@ -427,26 +607,27 @@ function performMakeMove(playerId, marbleId, moveType) {
                 gameState.currentRoll = 0;
                 gameState.movableMarbles = [];
                 gameState.possibleMoves = [];
+                triggerBotTurn(); // Bot goes again
             } else {
                 nextPlayer();
+                triggerBotTurn(); // Next player
             }
         }
         broadcastGameState();
-        triggerLightningTurn(); 
     }
 }
 
 function triggerLightningTurn() {
+    // Only for humans in lightning mode
     if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
+    if (players[gameState.activePlayer].isBot) return; // Handled by triggerBotTurn
 
     setTimeout(() => {
         if (!lightningMode || !gameState || gameState.phase === 'gameover') return;
-
         if (gameState.currentRoll === 0) {
             performRollDice(gameState.activePlayer);
             return;
         }
-
         if (gameState.currentRoll > 0 && gameState.movableMarbles.length > 0) {
             if (gameState.possibleMoves.length === 1) {
                 let movesForMarble = gameState.possibleMoves[0][1];
