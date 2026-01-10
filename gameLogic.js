@@ -1,3 +1,5 @@
+"use strict";
+
 (function(exports) {
     const colMap = 'ABCDEFGHIJKLMNOPQ';
     
@@ -26,7 +28,7 @@
     const MAPS = {
         '4p': {
             trackStr: TRACK_4P,
-            shortcutStr: 'I9', //
+            shortcutStr: 'I9', // Center
             players: [
                 { id: 1, workStr: ['A1','B2','C3','D4','E5'], branchStr: 'I2', homeStr: ['I3','I4','I5','I6','I7'], entry1Str: 'K2', entry6Str: 'K7', shortcutEntryStr: 'K7', shortcutExitStr: 'G7' },
                 { id: 2, workStr: ['Q1','P2','O3','N4','M5'], branchStr: 'P9', homeStr: ['O9','N9','M9','L9','K9'], entry1Str: 'P11', entry6Str: 'K11', shortcutEntryStr: 'K11', shortcutExitStr: 'K7' },
@@ -43,7 +45,8 @@
                     id: 1, 
                     workStr: ['A1','B1','A2','B2','A3'], //
                     branchStr: 'I16', //
-                    homeStr: ['I11','I12','I13','I14','I15'], //
+                    // Reversed to load from I15 upwards to I11
+                    homeStr: ['I15','I14','I13','I12','I11'], 
                     entry1Str: 'G2', entry6Str: 'G7', shortcutEntryStr: 'G7', shortcutExitStr: 'G11', //
                     path: TRACK_2P_P1 
                 },
@@ -132,8 +135,6 @@
 
             // Check if entering Home
             if (samePos(currP, pData.branch)) {
-                // If branch reached, next step is Home[0]
-                // logic implies you can enter home partially
                 nextKey = coordToKey(pData.home[0]);
             } else {
                 let hidx = pData.home.findIndex(h => samePos(h, currP));
@@ -147,7 +148,7 @@
                     } else {
                         nextKey = pData.trackNext.get(currentKey);
                     }
-                    if (!nextKey) return null; // End of line (Overshoot in 2P without hitting branch)
+                    if (!nextKey) return null; // End of line
                 }
             }
             path.push(posToCoord(nextKey));

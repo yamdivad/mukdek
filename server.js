@@ -25,7 +25,13 @@ let botTimeout = null;
 // --- SECURITY HELPERS ---
 function sanitizeString(str) {
     if (!str) return "";
-    return String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;").trim();
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;")
+        .trim();
 }
 
 function isValidHex(hex) {
@@ -42,13 +48,64 @@ function isRateLimited(playerObj) {
     return false;
 }
 
-// --- BOT COLORS ---
-const BOT_COLORS = {
+// --- COLOR MANAGEMENT ---
+const BOT_PREFERRED_COLORS = {
     1: '#e74c3c', // Red
-    2: '#2ecc71', // Green
+    2: '#2ecc71', // Light Green
     3: '#f1c40f', // Yellow
-    4: '#3498db'  // Blue
+    4: '#3498db'  // Light Blue
 };
+
+// Matches client-side palette
+const SERVER_PALETTE = [
+    "#e74c3c", "#e91e63", "#1b5e20", "#2ecc71", "#1565c0", 
+    "#3498db", "#ffffff", "#212121", "#f1c40f", "#ff9800", "#9c27b0"
+];
+
+function hexToRgb(hex) {
+    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : null;
+}
+
+// Check distance to prevent confusingly similar colors
+const SIMILARITY_THRESHOLD = 10; 
+function getColorDistance(hex1, hex2) {
+    const rgb1 = hexToRgb(hex1);
+    const rgb2 = hexToRgb(hex2);
+    if (!rgb1 || !rgb2) return 0;
+    return Math.sqrt(
+        Math.pow(rgb1.r - rgb2.r, 2) + 
+        Math.pow(rgb1.g - rgb2.g, 2) + 
+        Math.pow(rgb1.b - rgb2.b, 2)
+    );
+}
+
+function isColorAvailable(targetHex, currentPlayers) {
+    if (!isValidHex(targetHex)) return false;
+    for (const p of Object.values(currentPlayers)) {
+        if (p && p.color) {
+            let dist = getColorDistance(targetHex, p.color);
+            if (dist < SIMILARITY_THRESHOLD) return false;
+        }
+    }
+    return true;
+}
+
+function getNextAvailableBotColor(pid, currentPlayers) {
+    // 1. Try Preferred
+    let preferred = BOT_PREFERRED_COLORS[pid];
+    if (isColorAvailable(preferred, currentPlayers)) return preferred;
+
+    // 2. Try Palette
+    for (let color of SERVER_PALETTE) {
+        if (isColorAvailable(color, currentPlayers)) return color;
+    }
+    return '#999999'; // Fallback
+}
 
 io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
@@ -64,7 +121,7 @@ io.on('connection', (socket) => {
     }
 
     socket.emit('lobbyUpdate', getLobbyState());
-    socket.emit('gameModeUpdate', gameMode); // Send current mode on connect
+    socket.emit('gameModeUpdate', gameMode);
 
     if (gameState) {
         socket.emit('gameStart', gameMode); 
@@ -128,8 +185,6 @@ io.on('connection', (socket) => {
         if (gameState) return;
         
         let seatedCount = Object.values(players).filter(p => p !== null).length;
-        
-        // Cannot switch to 2p if > 2 players are seated
         if (mode === '2p' && seatedCount > 2) return;
         
         if (mode === '2p' || mode === '4p') {
@@ -143,15 +198,20 @@ io.on('connection', (socket) => {
         if (gameState) return;
         if (socket.id !== hostSocketId) return; 
         
-        // Block adding bot to seat 3 or 4 if in 2P mode
+        // Security: Input validation
+        if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 3) return;
+
         if (gameMode === '2p' && seatIndex >= 2) return;
 
         let pid = seatIndex + 1;
         if (players[pid] === null) {
+            // Intelligent Color Selection
+            let assignedColor = getNextAvailableBotColor(pid, players);
+
             players[pid] = {
                 id: 'BOT-' + pid,
                 session: 'BOT-' + pid,
-                color: BOT_COLORS[pid],
+                color: assignedColor,
                 name: `BOT ${pid}`,
                 ready: true,
                 isBot: true
@@ -163,6 +223,9 @@ io.on('connection', (socket) => {
     socket.on('removeBot', (seatIndex) => {
         if (gameState) return;
         if (socket.id !== hostSocketId) return;
+        
+        // Security: Input validation
+        if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 3) return;
 
         let pid = seatIndex + 1;
         if (players[pid] && players[pid].isBot) {
@@ -200,6 +263,9 @@ io.on('connection', (socket) => {
         if (isRateLimited(pData)) return; 
         if (!isValidHex(hex)) return;
 
+        if (!isColorAvailable(hex, players)) return;
+
+        // Double check exact ownership
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
 
@@ -223,6 +289,9 @@ io.on('connection', (socket) => {
     socket.on('kickPlayer', (targetPid) => {
         if (socket.id !== hostSocketId) return;
         if (targetPid === 1) return;
+        
+        // Security: Input validation
+        if (typeof targetPid !== 'number' || targetPid < 1 || targetPid > 4) return;
 
         if (players[targetPid]) {
             let isBot = players[targetPid].isBot;
@@ -252,9 +321,8 @@ io.on('connection', (socket) => {
         let activeCount = seatedPlayers.length;
         let allColors = seatedPlayers.every(([k, v]) => v.color !== null);
 
-        // Mode Validation
-        if (gameMode === '2p' && activeCount !== 2) return; // Must have exactly 2
-        if (gameMode === '4p' && activeCount < 2) return; // Must have 2+
+        if (gameMode === '2p' && activeCount !== 2) return; 
+        if (gameMode === '4p' && activeCount < 2) return; 
 
         if (allColors && !gameState) {
             console.log(`Starting ${gameMode} game with ${activeCount} players.`);
@@ -267,14 +335,12 @@ io.on('connection', (socket) => {
                 nameMap[k] = v.name;
             });
 
-            // Initialize state with mode
             gameState = gameLogic.initServerState(gameMode, colorMap);
             gameState.playerNames = nameMap;
             
             let firstActive = parseInt(seatedPlayers[0][0]);
             gameState.activePlayer = firstActive;
 
-            // Mark empty seats as finished
             let maxP = (gameMode === '2p') ? 2 : 4;
             for(let i=1; i<=maxP; i++) {
                 if(players[i] === null) gameState.finishedPlayers.push(i); 
@@ -297,7 +363,6 @@ io.on('connection', (socket) => {
         lightningMode = false;
         if(botTimeout) clearTimeout(botTimeout);
         
-        // Auto-switch mode if invalid count for 2P
         let seatedCount = Object.values(players).filter(p => p !== null).length;
         if (gameMode === '2p' && seatedCount > 2) {
             gameMode = '4p';
@@ -305,7 +370,6 @@ io.on('connection', (socket) => {
 
         for(let i=1; i<=4; i++) {
             if(players[i]) {
-                // Keep bots ready, reset humans
                 players[i].ready = players[i].isBot || (i === 1);
                 players[i].lastAction = 0;
             }
@@ -372,7 +436,6 @@ io.on('connection', (socket) => {
             }
         }
         
-        // Mode safety check on disconnect
         let seatedCount = Object.values(players).filter(p => p !== null).length;
         if (gameMode === '2p' && seatedCount > 2) {
              gameMode = '4p';
