@@ -130,6 +130,14 @@
                 
                 <input type="text" id="name-input" placeholder="INITIALS" maxlength="3">
                 
+                <div id="mode-selector" style="margin: 15px 0; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px;">
+                    <p style="color:#d7ccc8; font-size: 0.9em; margin-bottom:5px;">SELECT BOARD TYPE:</p>
+                    <div style="display:flex; gap:10px; justify-content:center;">
+                        <button id="btn-mode-4p" class="btn-base" style="width:45%; font-size:1em; margin:0; padding:10px;" onclick="selectMode('4p')">CLASSIC (4P)</button>
+                        <button id="btn-mode-2p" class="btn-base" style="width:45%; font-size:1em; margin:0; padding:10px;" onclick="selectMode('2p')">DUEL (2P)</button>
+                    </div>
+                </div>
+
                 <p style="color:#d7ccc8; font-size: 0.9em;">Choose your marble color:</p>
                 <div class="color-grid" id="color-container"></div>
                 
@@ -213,6 +221,7 @@
         let isLightningMode = false;
         let celebratedPlayers = new Set();
         let isFirstRender = true;
+        let currentGameMode = '4p';
 
         const faviconLink = document.getElementById("dynamic-favicon");
         const originalFavicon = "favicon.svg";
@@ -281,8 +290,8 @@
         
         function kickPlayer(pid) {
             if(confirm(`Are you sure you want to remove Player ${pid}?`)) {
-                socket.emit('removeBot', pid - 1); // Try removing bot first
-                socket.emit('kickPlayer', pid); // Then kick real player
+                socket.emit('removeBot', pid - 1); 
+                socket.emit('kickPlayer', pid); 
             }
         }
         
@@ -317,6 +326,35 @@
                 faviconLink.href = originalFavicon;
             }
         }
+
+        function selectMode(mode) {
+            socket.emit('setGameMode', mode);
+        }
+
+        socket.on('gameModeUpdate', (mode) => {
+            currentGameMode = mode;
+            let btn4 = document.getElementById('btn-mode-4p');
+            let btn2 = document.getElementById('btn-mode-2p');
+            
+            btn4.style.background = (mode === '4p') ? '#2e7d32' : '#a1887f';
+            btn2.style.background = (mode === '2p') ? '#2e7d32' : '#a1887f';
+            
+            if (myPlayerId !== 1) {
+                document.getElementById('mode-selector').style.pointerEvents = 'none';
+                document.getElementById('mode-selector').style.opacity = '0.7';
+            } else {
+                document.getElementById('mode-selector').style.pointerEvents = 'all';
+                document.getElementById('mode-selector').style.opacity = '1';
+            }
+
+            // Hide/Show P3/P4 slots in lobby based on mode
+            document.getElementById('tk-3').style.visibility = (mode === '2p') ? 'hidden' : 'visible';
+            document.getElementById('tk-4').style.visibility = (mode === '2p') ? 'hidden' : 'visible';
+            
+            // Hide/Show P3/P4 status bars in game
+            document.getElementById('p3').style.visibility = (mode === '2p') ? 'hidden' : 'visible';
+            document.getElementById('p4').style.visibility = (mode === '2p') ? 'hidden' : 'visible';
+        });
 
         socket.on('lightningStatus', (isOn) => {
             isLightningMode = isOn;
@@ -397,26 +435,43 @@
         }
 
         socket.on('lobbyUpdate', (state) => {
+            // Update 2P button state
+            if (myPlayerId === 1) {
+                // FORCE ENABLE SELECTOR IF HOST
+                document.getElementById('mode-selector').style.pointerEvents = 'all';
+                document.getElementById('mode-selector').style.opacity = '1';
+
+                let btn2 = document.getElementById('btn-mode-2p');
+                if (state.seatedCount > 2) {
+                    btn2.disabled = true;
+                    btn2.style.opacity = 0.5;
+                    btn2.textContent = "DUEL (Max 2)";
+                } else {
+                    btn2.disabled = false;
+                    btn2.style.opacity = 1;
+                    btn2.textContent = "DUEL (2P)";
+                }
+            }
+
             for(let i=1; i<=4; i++) {
                 let tk = document.getElementById(`tk-${i}`);
                 let pData = state.players[i];
                 
-                // Clear existing
                 tk.className = 'tracker-slot';
                 tk.style.backgroundColor = 'transparent';
                 tk.innerHTML = '';
-                // Clear any added buttons
                 while(tk.firstChild) tk.removeChild(tk.firstChild);
 
                 if (!pData) {
-                    // Empty slot
                     if (myPlayerId === 1) {
-                         // Add Bot Button
-                         let botBtn = document.createElement('button');
-                         botBtn.className = 'add-bot-btn';
-                         botBtn.textContent = "+ BOT";
-                         botBtn.onclick = () => addBot(i);
-                         tk.appendChild(botBtn);
+                         // Only show Add Bot for P1/P2 if in duel, or all in 4P
+                         if (currentGameMode === '4p' || (currentGameMode === '2p' && i <= 2)) {
+                             let botBtn = document.createElement('button');
+                             botBtn.className = 'add-bot-btn';
+                             botBtn.textContent = "+ BOT";
+                             botBtn.onclick = () => addBot(i);
+                             tk.appendChild(botBtn);
+                         }
                     }
                 } else {
                     tk.className = 'tracker-slot joined';
@@ -427,14 +482,12 @@
                     if (pData.isBot) statusSymbol = '🤖';
                     else if (pData.ready) statusSymbol = (i === 1) ? '👑' : '✓';
                     
-                    // Main Symbol container
                     let symbolSpan = document.createElement('span');
                     symbolSpan.textContent = statusSymbol;
                     tk.appendChild(symbolSpan);
 
                     if (pData.ready) tk.classList.add('ready');
                     
-                    // Host Controls (Kick/Remove)
                     if (myPlayerId === 1 && i !== 1) {
                         let kickBtn = document.createElement('div');
                         kickBtn.className = 'kick-btn';
@@ -528,12 +581,22 @@
                 startBtn.style.display = 'block';
                 claimHostBtn.style.display = 'none'; 
                 
-                if (allReady) {
+                // Extra validation for host start
+                let validMode = true;
+                if (currentGameMode === '2p' && seated.length !== 2) validMode = false;
+
+                if (allReady && validMode) {
                     startBtn.classList.add('ready');
+                    startBtn.disabled = false;
                     document.getElementById('lobby-msg').textContent = "You are the Host. Start when everyone is ready.";
                 } else {
                     startBtn.classList.remove('ready');
-                    document.getElementById('lobby-msg').textContent = "Waiting for players to join/pick colors...";
+                    startBtn.disabled = true;
+                    if (currentGameMode === '2p' && seated.length !== 2) {
+                        document.getElementById('lobby-msg').textContent = "Duel Mode requires exactly 2 players.";
+                    } else {
+                        document.getElementById('lobby-msg').textContent = "Waiting for players...";
+                    }
                 }
             } else {
                 startBtn.style.display = 'none';
@@ -589,23 +652,36 @@
             ghosts.forEach(g => g.remove());
         }
 
-        function initBoard() {
+        function initBoard(mode) {
             board.innerHTML = '';
-            const trackSet = new Set(gameLogic.trackStr);
-            const workSets = gameLogic.players.map(p => new Set(p.workStr));
-            const homeSets = gameLogic.players.map(p => new Set(p.homeStr));
+            let mapData = gameLogic.MAPS[mode || '4p'];
+            
+            const trackSet = new Set(mapData.trackStr);
+            const shortcutSet = new Set([mapData.shortcutStr]);
+            
+            // Create Sets for Work/Home based on players in this map
+            let workSets = [], homeSets = [];
+            mapData.players.forEach(p => {
+                workSets[p.id] = new Set(p.workStr);
+                homeSets[p.id] = new Set(p.homeStr);
+            });
 
             for (let r = 0; r < 17; r++) {
                 for (let c = 0; c < 17; c++) {
                     let cell = document.createElement('div');
                     cell.className = 'cell';
                     let key = gameLogic.colMap[c] + (r + 1);
+                    
                     if (trackSet.has(key)) cell.classList.add('track');
-                    if (key === 'I9') cell.classList.add('shortcut'); 
-                    for (let pp = 0; pp < 4; pp++) {
-                        if (workSets[pp].has(key)) cell.classList.add('work');
-                        else if (homeSets[pp].has(key)) cell.classList.add('home');
-                    }
+                    if (shortcutSet.has(key)) cell.classList.add('shortcut'); 
+                    
+                    mapData.players.forEach(p => {
+                        if (workSets[p.id].has(key)) {
+                            cell.classList.add('work');
+                        }
+                        else if (homeSets[p.id].has(key)) cell.classList.add('home');
+                    });
+                    
                     board.appendChild(cell);
                 }
             }
@@ -618,11 +694,17 @@
             banner.style.color = getContrastColor(colorHex);
 
             let rotation = 0;
-            switch(pid) {
-                case 1: rotation = 180; break;
-                case 2: rotation = 90; break;
-                case 3: rotation = 0; break;
-                case 4: rotation = 270; break;
+            
+            // CHANGE 3: DISABLE ROTATION IF 2P MODE
+            if (currentGameMode === '2p') {
+                rotation = 0;
+            } else {
+                switch(pid) {
+                    case 1: rotation = 180; break;
+                    case 2: rotation = 90; break;
+                    case 3: rotation = 0; break;
+                    case 4: rotation = 270; break;
+                }
             }
             container.style.transform = `rotate(${rotation}deg)`;
             shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
@@ -631,7 +713,7 @@
         function checkForLeader(marbles) {
             let counts = [0,0,0,0];
             marbles.forEach(m => {
-                if (gameLogic.isHomePos(m.player, m.pos)) counts[m.player - 1]++;
+                if (gameLogic.isHomePos(currentGameState.mode, m.player, m.pos)) counts[m.player - 1]++;
             });
 
             let max = Math.max(...counts);
@@ -655,10 +737,17 @@
             triggerPopup(pid, "IS LEADING!");
         }
 
-        function triggerPopup(pid, suffix) {
+        // CHANGE 2: Updated Trigger Popup to handle Winner state distinctly
+        function triggerPopup(pid, suffix, isWinner = false) {
             let pColor = gameColors[pid] || '#999';
             let pName = (currentGameState.playerNames && currentGameState.playerNames[pid]) || `PLAYER ${pid}`;
-            targetName.textContent = `${pName} ${suffix}`;
+            
+            if (isWinner) {
+                targetPop.innerHTML = `<span style="font-size:1.5em; display:block; margin-top:10px;">${pName}</span>WINS!`;
+            } else {
+                targetPop.innerHTML = `TARGET!<br>TARGET!<br>TARGET!<span id="target-name">${pName} ${suffix}</span>`;
+            }
+            
             targetPop.style.backgroundColor = pColor;
             targetPop.style.color = getContrastColor(pColor);
             
@@ -676,11 +765,25 @@
             let maxKills = -1; let killer = null;
             let maxDeaths = -1; let victim = null;
 
-            for(let i=1; i<=4; i++) {
+            let maxP = (currentGameMode === '2p') ? 2 : 4;
+
+            for(let i=1; i<=maxP; i++) {
                 if(!names[i]) continue; 
                 let kills = stats.murders[i] || 0;
                 let deaths = stats.deaths[i] || 0;
-                html += `<tr><td>${names[i]}</td><td>${kills}</td><td>${deaths}</td></tr>`;
+                
+                // CHANGE 1: ADD MEDAL TO STATS
+                let suffix = '';
+                if (currentGameState && currentGameState.finishedPlayers) {
+                    let finishIdx = currentGameState.finishedPlayers.indexOf(i);
+                    if (finishIdx !== -1) {
+                        if (finishIdx === 0) suffix = ' 🥇';
+                        else if (finishIdx === 1) suffix = ' 🥈';
+                        else if (finishIdx === 2) suffix = ' 🥉';
+                    }
+                }
+
+                html += `<tr><td>${names[i]}${suffix}</td><td>${kills}</td><td>${deaths}</td></tr>`;
                 
                 if (kills > maxKills) { maxKills = kills; killer = names[i]; }
                 if (deaths > maxDeaths) { maxDeaths = deaths; victim = names[i]; }
@@ -723,7 +826,8 @@
                         
                         if (!isFirstRender) {
                             confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-                            if (index === 0) triggerPopup(pid, "IS THE WINNER!");
+                            // CHANGE 2: Call triggerPopup with isWinner = true
+                            if (index === 0) triggerPopup(pid, "", true);
                         }
                     }
                 }
@@ -772,7 +876,8 @@
             const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
             document.getElementById('dice').textContent = state.currentRoll > 0 ? diceChars[state.currentRoll - 1] : '🎲';
 
-            for(let i=1; i<=4; i++) {
+            let maxP = (currentGameMode === '2p') ? 2 : 4;
+            for(let i=1; i<=maxP; i++) {
                 let el = document.getElementById(`p${i}`);
                 let pColor = gameColors[i];
                 let pName = (state.playerNames && state.playerNames[i]) || `P${i}`;
@@ -816,7 +921,7 @@
                 if(i === state.activePlayer) el.classList.add('active');
                 else el.classList.remove('active');
                 
-                let inHome = state.marbles.filter(m => m.player === i && gameLogic.isHomePos(i, m.pos)).length;
+                let inHome = state.marbles.filter(m => m.player === i && gameLogic.isHomePos(currentGameState.mode, i, m.pos)).length;
                 document.getElementById(`h${i}`).textContent = inHome;
             }
 
@@ -918,9 +1023,14 @@
             if (moves.some(m => m.type === 'shortcut') && moves.length > 1) {
                 pendingShortcutMarbleId = mid;
                 let rotation = 0;
-                if (myPlayerId === 1) rotation = 180;
-                else if (myPlayerId === 2) rotation = 90;
-                else if (myPlayerId === 4) rotation = 270;
+                
+                if (currentGameMode === '2p') {
+                    rotation = 0;
+                } else {
+                    if (myPlayerId === 1) rotation = 180;
+                    else if (myPlayerId === 2) rotation = 90;
+                    else if (myPlayerId === 4) rotation = 270;
+                }
                 shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(1)`;
                 shortcutModal.classList.add('active');
             } else {
@@ -933,9 +1043,11 @@
             shortcutModal.classList.remove('active');
             setTimeout(() => {
                 let rotation = 0;
-                if (myPlayerId === 1) rotation = 180;
-                else if (myPlayerId === 2) rotation = 90;
-                else if (myPlayerId === 4) rotation = 270;
+                if (currentGameMode !== '2p') {
+                     if (myPlayerId === 1) rotation = 180;
+                     else if (myPlayerId === 2) rotation = 90;
+                     else if (myPlayerId === 4) rotation = 270;
+                }
                 shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
             }, 300);
 
@@ -946,21 +1058,23 @@
             }
         }
 
-        socket.on('gameStart', () => { 
+        socket.on('gameStart', (mode) => { 
+            currentGameMode = mode;
             lobbyOverlay.style.display = 'none'; 
             celebratedPlayers.clear();
+            initBoard(mode); 
         });
         socket.on('gameReset', () => {
              lobbyOverlay.style.display = 'flex';
              board.innerHTML = '';
-             initBoard(); 
+             initBoard(currentGameMode); 
              settingsMenu.style.display = 'none';
              celebratedPlayers.clear();
         });
         socket.on('gameState', renderState);
 
         initLobbyUI();
-        initBoard();
+        initBoard('4p'); // Default render 4p map in background
     </script>
 </body>
 </html>
