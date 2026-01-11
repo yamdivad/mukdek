@@ -1,7 +1,8 @@
 "use strict";
 
 (function(exports) {
-    const colMap = 'ABCDEFGHIJKLMNOPQ';
+    // Extended for 4P (Q=17), fits 6P (O=15)
+    const colMap = 'ABCDEFGHIJKLMNOPQ'; 
     
     // --- Helpers ---
     function posToCoord(key) {
@@ -20,15 +21,36 @@
     const TRACK_4P = ['G2','H2','I2','J2','K2','K3','K4','K5','K6','K7','L7','M7','N7','O7','P7','P8','P9','P10','P11','O11','N11','M11','L11','K11','K12','K13','K14','K15','K16','J16','I16','H16','G16','G15','G14','G13','G12','G11','F11','E11','D11','C11','B11','B10','B9','B8','B7','C7','D7','E7','F7','G7','G6','G5','G4','G3'];
 
     // 2 Player Duel Tracks (Linear/U-Shape)
-    // P1: Counter-Clockwise from G2 -> I16
     const TRACK_2P_P1 = ['G2','G3','G4','G5','G6','G7','F7','E7','D7','C7','B7','B8','B9','B10','B11','C11','D11','E11','F11','G11','G12','G13','G14','G15','G16','H16','I16'];
-    // P2: Clockwise from G16 -> I2
     const TRACK_2P_P2 = ['G16','G15','G14','G13','G12','G11','F11','E11','D11','C11','B11','B10','B9','B8','B7','C7','D7','E7','F7','G7','G6','G5','G4','G3','G2','H2','I2'];
+
+    // 6 Player Track (Cross with double bars) - 15 Columns (A-O), 19 Rows
+    const TRACK_6P = [
+        'F1', 'G1', 'H1', 'I1', 'J1', 'J2', 'J3', 'J4', 'J5', // Top Leg Right
+        'K5', 'L5', 'M5', 'N5', // Right Arm Top
+        'N6', 'N7', 'N8', 'N9', // Right Arm Right
+        'M9', 'L9', 'K9', // Right Arm Bottom (upper)
+        'J10', // Center Right (Regular track tile)
+        'K11', 'L11', 'M11', 'N11', // Right Arm Bottom (lower)
+        'N12', 'N13', 'N14', 'N15', // Right Arm Right (lower)
+        'M15', 'L15', 'K15', 'J15', // Bottom Leg Right
+        'J16', 'J17', 'J18', 'J19', 'I19', 'H19', 'G19', 'F19', // Bottom Leg Bottom & Left
+        'F18', 'F17', 'F16', 'F15', // Bottom Leg Left
+        'E15', 'D15', 'C15', 'B15', // Left Arm Bottom
+        'B14', 'B13', 'B12', 'B11', // Left Arm Left
+        'C11', 'D11', 'E11', // Left Arm Top (lower)
+        'F10', // Center Left
+        'E9', 'D9', 'C9', 'B9', // Left Arm Top (upper)
+        'B8', 'B7', 'B6', 'B5', // Left Arm Left
+        'C5', 'D5', 'E5', 'F5', // Left Arm Top
+        'F4', 'F3', 'F2' // Top Leg Left
+    ];
 
     const MAPS = {
         '4p': {
+            gridCols: 17, gridRows: 17,
             trackStr: TRACK_4P,
-            shortcutStr: 'I9', // Center
+            shortcutStr: 'I9',
             players: [
                 { id: 1, workStr: ['A1','B2','C3','D4','E5'], branchStr: 'I2', homeStr: ['I3','I4','I5','I6','I7'], entry1Str: 'K2', entry6Str: 'K7', shortcutEntryStr: 'K7', shortcutExitStr: 'G7' },
                 { id: 2, workStr: ['Q1','P2','O3','N4','M5'], branchStr: 'P9', homeStr: ['O9','N9','M9','L9','K9'], entry1Str: 'P11', entry6Str: 'K11', shortcutEntryStr: 'K11', shortcutExitStr: 'K7' },
@@ -37,32 +59,48 @@
             ]
         },
         '2p': {
-            // Combined track for visual rendering
+            gridCols: 17, gridRows: 17,
             trackStr: [...new Set([...TRACK_2P_P1, ...TRACK_2P_P2])],
-            shortcutStr: 'E9', //
+            shortcutStr: 'E9',
+            players: [
+                { id: 1, workStr: ['A1','B1','A2','B2','A3'], branchStr: 'I16', homeStr: ['I15','I14','I13','I12','I11'], entry1Str: 'G2', entry6Str: 'G7', shortcutEntryStr: 'G7', shortcutExitStr: 'G11', path: TRACK_2P_P1 },
+                { id: 2, workStr: ['A15','A16','B16','A17','B17'], branchStr: 'I2', homeStr: ['I3','I4','I5','I6','I7'], entry1Str: 'G16', entry6Str: 'G11', shortcutEntryStr: 'G11', shortcutExitStr: 'G7', path: TRACK_2P_P2 }
+            ]
+        },
+        '6p': {
+            gridCols: 15, gridRows: 19, // 15 columns (A-O), 19 Rows
+            trackStr: TRACK_6P,
+            shortcutStr: 'J10', // Fallback, distinct shortcuts defined per player below
             players: [
                 { 
-                    id: 1, 
-                    workStr: ['A1','B1','A2','B2','A3'], //
-                    branchStr: 'I16', //
-                    // Reversed to load from I15 upwards to I11
-                    homeStr: ['I15','I14','I13','I12','I11'], 
-                    entry1Str: 'G2', entry6Str: 'G7', shortcutEntryStr: 'G7', shortcutExitStr: 'G11', //
-                    path: TRACK_2P_P1 
+                    id: 1, workStr: ['C2','D2','C3','D3'], branchStr: 'H1', homeStr: ['H2','H3','H4','H5'], 
+                    entry1Str: 'J1', entry6Str: 'J5', shortcutEntryStr: 'J5', shortcutExitStr: 'F5', targetShortcutStr: 'H9' 
                 },
                 { 
-                    id: 2, 
-                    workStr: ['A15','A16','B16','A17','B17'], //
-                    branchStr: 'I2', //
-                    homeStr: ['I3','I4','I5','I6','I7'], //
-                    entry1Str: 'G16', entry6Str: 'G11', shortcutEntryStr: 'G11', shortcutExitStr: 'G7', //
-                    path: TRACK_2P_P2
+                    id: 2, workStr: ['L2','M2','L3','M3'], branchStr: 'N7', homeStr: ['M7','L7','K7','J7'], 
+                    entry1Str: 'N9', entry6Str: 'J10', shortcutEntryStr: 'J10', shortcutExitStr: 'J5', targetShortcutStr: 'H9'
+                },
+                { 
+                    id: 3, workStr: ['O11','O12','O13','O14'], branchStr: 'N13', homeStr: ['M13','L13','K13','J13'], 
+                    entry1Str: 'N15', entry6Str: 'J15', shortcutEntryStr: 'J15', shortcutExitStr: 'J10', targetShortcutStr: 'H11'
+                },
+                { 
+                    id: 4, workStr: ['L17','M17','L18','M18'], branchStr: 'H19', homeStr: ['H18','H17','H16','H15'], 
+                    entry1Str: 'F19', entry6Str: 'F15', shortcutEntryStr: 'F15', shortcutExitStr: 'J15', targetShortcutStr: 'H11'
+                },
+                { 
+                    id: 5, workStr: ['C17','D17','C18','D18'], branchStr: 'B13', homeStr: ['C13','D13','E13','F13'], 
+                    entry1Str: 'B11', entry6Str: 'F10', shortcutEntryStr: 'F10', shortcutExitStr: 'F15', targetShortcutStr: 'H11'
+                },
+                { 
+                    id: 6, workStr: ['A6','A7','A8','A9'], branchStr: 'B7', homeStr: ['C7','D7','E7','F7'], 
+                    entry1Str: 'B5', entry6Str: 'F5', shortcutEntryStr: 'F5', shortcutExitStr: 'F10', targetShortcutStr: 'H9'
                 }
             ]
         }
     };
 
-    // Pre-process Data (Convert strings to coords)
+    // Pre-process Data
     Object.keys(MAPS).forEach(mode => {
         let m = MAPS[mode];
         m.shortcutCoord = posToCoord(m.shortcutStr);
@@ -75,12 +113,12 @@
             p.entry6 = posToCoord(p.entry6Str);
             p.shortcutEntry = posToCoord(p.shortcutEntryStr);
             p.shortcutExit = posToCoord(p.shortcutExitStr);
+            if (p.targetShortcutStr) p.targetShortcut = posToCoord(p.targetShortcutStr);
             if(p.path) p.pathCoords = p.path.map(posToCoord);
             return p;
         });
         
-        // Next Map for 4P (Ring)
-        if (mode === '4p') {
+        if (mode === '4p' || mode === '6p') {
             m.trackNext = new Map();
             for (let i = 0; i < m.trackStr.length; i++) {
                 let key = m.trackStr[i];
@@ -88,7 +126,6 @@
                 m.trackNext.set(key, m.trackStr[nextIdx]);
             }
         }
-        // Next Map for 2P (Linear Paths)
         if (mode === '2p') {
             m.processedPlayers.forEach(p => {
                 p.trackNext = new Map();
@@ -116,8 +153,8 @@
     }
 
     function isProtectedPos(mode, marbles, pos, excludePlayerId) {
-        let limit = (mode === '2p') ? 2 : 4;
-        for (let pid = 1; pid <= limit; pid++) {
+        let maxP = (mode === '2p') ? 2 : (mode === '6p' ? 6 : 4);
+        for (let pid = 1; pid <= maxP; pid++) {
             if (pid === excludePlayerId) continue;
             if (isWorkPos(mode, pid, pos) || isHomePos(mode, pid, pos)) return true;
         }
@@ -139,16 +176,15 @@
             } else {
                 let hidx = pData.home.findIndex(h => samePos(h, currP));
                 if (hidx !== -1) {
-                    if (hidx + 1 >= 5) return null; // Overshoot home end
+                    if (hidx + 1 >= pData.home.length) return null; // Overshoot
                     nextKey = coordToKey(pData.home[hidx + 1]);
                 } else {
-                    // Get next track position
-                    if (mode === '4p') {
-                        nextKey = mapData.trackNext.get(currentKey);
-                    } else {
+                    if (mode === '2p') {
                         nextKey = pData.trackNext.get(currentKey);
+                    } else {
+                        nextKey = mapData.trackNext.get(currentKey);
                     }
-                    if (!nextKey) return null; // End of line
+                    if (!nextKey) return null;
                 }
             }
             path.push(posToCoord(nextKey));
@@ -167,7 +203,7 @@
         let pData = mapData.processedPlayers[playerId - 1];
         let startPos = marble.pos;
 
-        // Spawn Logic
+        // Spawn
         if (isWorkPos(mode, playerId, startPos)) {
             if (roll === 1 || roll === 6) {
                 let dest = roll === 1 ? pData.entry1 : pData.entry6;
@@ -179,7 +215,8 @@
         }
 
         // Shortcut Logic
-        let shortcutCoord = mapData.shortcutCoord;
+        // Use specific target shortcut if defined (6p), else default (4p/2p)
+        let shortcutCoord = pData.targetShortcut || mapData.shortcutCoord;
         
         // Enter Shortcut (Roll 1)
         if (roll === 1 && samePos(startPos, pData.shortcutEntry)) {
@@ -204,7 +241,6 @@
                 let dest = advancePath[advancePath.length - 1];
                 let intermediates = advancePath.slice(0, -1);
                 
-                // Rule: Cannot jump own marbles
                 if (intermediates.every(p => !hasOwnAt(marbles, playerId, p)) && 
                     !hasOwnAt(marbles, playerId, dest) && 
                     !isProtectedPos(mode, marbles, dest, playerId)) {
@@ -219,11 +255,12 @@
     function initServerState(mode, assignedColors) {
         let marbles = [];
         let mapData = MAPS[mode];
-        let playerCount = (mode === '2p') ? 2 : 4;
+        let playerCount = (mode === '2p') ? 2 : (mode === '6p' ? 6 : 4);
 
         for (let pi = 0; pi < playerCount; pi++) {
             let pData = mapData.processedPlayers[pi];
-            for (let mi = 0; mi < 5; mi++) {
+            let marbleCount = pData.work.length; 
+            for (let mi = 0; mi < marbleCount; mi++) {
                 marbles.push({ id: marbles.length, player: pData.id, pos: { ...pData.work[mi] } });
             }
         }

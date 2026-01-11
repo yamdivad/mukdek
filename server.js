@@ -11,13 +11,13 @@ const io = socketIo(server);
 app.use(express.static(path.join(__dirname)));
 
 // --- GLOBAL STATE ---
-let players = { 1: null, 2: null, 3: null, 4: null };
+let players = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
 let connectedSockets = new Set();
 let hostSocketId = null;
 let gameState = null;
 let totalPlayersAtStart = 0;
 let gameDestructionTimeout = null;
-let gameMode = '4p'; // '4p' or '2p'
+let gameMode = '4p'; 
 
 let lightningMode = false;
 let botTimeout = null; 
@@ -53,10 +53,11 @@ const BOT_PREFERRED_COLORS = {
     1: '#e74c3c', // Red
     2: '#2ecc71', // Light Green
     3: '#f1c40f', // Yellow
-    4: '#3498db'  // Light Blue
+    4: '#3498db', // Light Blue
+    5: '#ff9800', // Orange
+    6: '#9c27b0'  // Purple
 };
 
-// Matches client-side palette
 const SERVER_PALETTE = [
     "#e74c3c", "#e91e63", "#1b5e20", "#2ecc71", "#1565c0", 
     "#3498db", "#ffffff", "#212121", "#f1c40f", "#ff9800", "#9c27b0"
@@ -71,7 +72,6 @@ function hexToRgb(hex) {
     } : null;
 }
 
-// Check distance to prevent confusingly similar colors
 const SIMILARITY_THRESHOLD = 10; 
 function getColorDistance(hex1, hex2) {
     const rgb1 = hexToRgb(hex1);
@@ -96,15 +96,13 @@ function isColorAvailable(targetHex, currentPlayers) {
 }
 
 function getNextAvailableBotColor(pid, currentPlayers) {
-    // 1. Try Preferred
     let preferred = BOT_PREFERRED_COLORS[pid];
     if (isColorAvailable(preferred, currentPlayers)) return preferred;
 
-    // 2. Try Palette
     for (let color of SERVER_PALETTE) {
         if (isColorAvailable(color, currentPlayers)) return color;
     }
-    return '#999999'; // Fallback
+    return '#999999'; 
 }
 
 io.on('connection', (socket) => {
@@ -159,7 +157,7 @@ io.on('connection', (socket) => {
         if (typeof sessionId !== 'string') return;
         if (Object.values(players).some(p => p && p.session === sessionId)) return;
 
-        for (let i = 1; i <= 4; i++) {
+        for (let i = 1; i <= 6; i++) {
             if (players[i] === null) {
                 players[i] = { 
                     id: socket.id, 
@@ -185,27 +183,28 @@ io.on('connection', (socket) => {
         if (gameState) return;
         
         let seatedCount = Object.values(players).filter(p => p !== null).length;
-        if (mode === '2p' && seatedCount > 2) return;
         
-        if (mode === '2p' || mode === '4p') {
+        if (mode === '2p' && seatedCount > 2) return;
+        if ((mode === '4p' || mode === '2p') && seatedCount > 4) return;
+        if (mode === '6p' && seatedCount < 2) return; 
+        
+        if (['2p', '4p', '6p'].includes(mode)) {
             gameMode = mode;
             io.emit('gameModeUpdate', gameMode);
         }
     });
 
-    // --- BOT MANAGEMENT ---
     socket.on('addBot', (seatIndex) => {
         if (gameState) return;
         if (socket.id !== hostSocketId) return; 
         
-        // Security: Input validation
-        if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 3) return;
+        if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 5) return;
 
         if (gameMode === '2p' && seatIndex >= 2) return;
+        if (gameMode === '4p' && seatIndex >= 4) return;
 
         let pid = seatIndex + 1;
         if (players[pid] === null) {
-            // Intelligent Color Selection
             let assignedColor = getNextAvailableBotColor(pid, players);
 
             players[pid] = {
@@ -223,9 +222,7 @@ io.on('connection', (socket) => {
     socket.on('removeBot', (seatIndex) => {
         if (gameState) return;
         if (socket.id !== hostSocketId) return;
-        
-        // Security: Input validation
-        if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 3) return;
+        if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 5) return;
 
         let pid = seatIndex + 1;
         if (players[pid] && players[pid].isBot) {
@@ -265,7 +262,6 @@ io.on('connection', (socket) => {
 
         if (!isColorAvailable(hex, players)) return;
 
-        // Double check exact ownership
         let isTaken = Object.values(players).some(p => p && p.id !== socket.id && p.color === hex);
         if (isTaken) return;
 
@@ -289,9 +285,7 @@ io.on('connection', (socket) => {
     socket.on('kickPlayer', (targetPid) => {
         if (socket.id !== hostSocketId) return;
         if (targetPid === 1) return;
-        
-        // Security: Input validation
-        if (typeof targetPid !== 'number' || targetPid < 1 || targetPid > 4) return;
+        if (typeof targetPid !== 'number' || targetPid < 1 || targetPid > 6) return;
 
         if (players[targetPid]) {
             let isBot = players[targetPid].isBot;
@@ -323,6 +317,7 @@ io.on('connection', (socket) => {
 
         if (gameMode === '2p' && activeCount !== 2) return; 
         if (gameMode === '4p' && activeCount < 2) return; 
+        if (gameMode === '6p' && activeCount < 2) return; 
 
         if (allColors && !gameState) {
             console.log(`Starting ${gameMode} game with ${activeCount} players.`);
@@ -341,7 +336,7 @@ io.on('connection', (socket) => {
             let firstActive = parseInt(seatedPlayers[0][0]);
             gameState.activePlayer = firstActive;
 
-            let maxP = (gameMode === '2p') ? 2 : 4;
+            let maxP = (gameMode === '2p') ? 2 : (gameMode === '6p' ? 6 : 4);
             for(let i=1; i<=maxP; i++) {
                 if(players[i] === null) gameState.finishedPlayers.push(i); 
             }
@@ -364,11 +359,10 @@ io.on('connection', (socket) => {
         if(botTimeout) clearTimeout(botTimeout);
         
         let seatedCount = Object.values(players).filter(p => p !== null).length;
-        if (gameMode === '2p' && seatedCount > 2) {
-            gameMode = '4p';
-        }
+        if (gameMode === '2p' && seatedCount > 2) gameMode = '4p';
+        if (gameMode === '4p' && seatedCount > 4) gameMode = '6p';
 
-        for(let i=1; i<=4; i++) {
+        for(let i=1; i<=6; i++) {
             if(players[i]) {
                 players[i].ready = players[i].isBot || (i === 1);
                 players[i].lastAction = 0;
@@ -439,13 +433,14 @@ io.on('connection', (socket) => {
         let seatedCount = Object.values(players).filter(p => p !== null).length;
         if (gameMode === '2p' && seatedCount > 2) {
              gameMode = '4p';
+             if (seatedCount > 4) gameMode = '6p';
              io.emit('gameModeUpdate', gameMode);
         }
 
         if (connectedSockets.size === 0) {
             gameDestructionTimeout = setTimeout(() => {
                 gameState = null;
-                players = { 1: null, 2: null, 3: null, 4: null };
+                players = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
             }, 60000); 
         }
         io.emit('lobbyUpdate', getLobbyState()); 
@@ -543,7 +538,16 @@ function calculateProgress(pid, pos) {
     if (mode === '2p') {
         let trackIdx = pData.path.indexOf(key);
         if (trackIdx !== -1) return 10 + trackIdx;
-        if (key === 'E9') return 100; // 2P Shortcut
+        if (key === 'E9') return 100;
+    } else if (mode === '6p') {
+        let trackIdx = gameLogic.MAPS['6p'].trackStr.indexOf(key);
+        if (trackIdx !== -1) {
+            let startKey = gameLogic.coordToKey(pData.entry1);
+            let startIdx = gameLogic.MAPS['6p'].trackStr.indexOf(startKey);
+            let dist = (trackIdx - startIdx + gameLogic.MAPS['6p'].trackStr.length) % gameLogic.MAPS['6p'].trackStr.length;
+            return 10 + dist;
+        }
+        if (key === 'H9' || key === 'H11') return 100; // Shortcuts
     } else {
         let trackIdx = gameLogic.MAPS['4p'].trackStr.indexOf(key);
         if (trackIdx !== -1) {
@@ -575,7 +579,7 @@ function performRollDice(playerId) {
         gameState.initRolls[pIndex] = roll;
         gameState.message = `${pName} rolled ${roll}.`;
 
-        let maxP = (gameState.mode === '2p') ? 2 : 4;
+        let maxP = (gameState.mode === '2p') ? 2 : (gameState.mode === '6p' ? 6 : 4);
         let realPlayerIds = Object.keys(players).filter(k => players[k] !== null && k <= maxP).map(Number);
         let allRolled = realPlayerIds.every(pid => gameState.initRolls[pid-1] > 0);
 
@@ -669,10 +673,12 @@ function performMakeMove(playerId, marbleId, moveType) {
         let pName = gameState.playerNames[pId] || `P${pId}`;
         let inHome = gameState.marbles.filter(m => m.player === pId && gameLogic.isHomePos(gameState.mode, pId, m.pos)).length;
         
-        if (inHome === 5) {
+        let needed = (gameState.mode === '6p') ? 4 : 5;
+
+        if (inHome === needed) {
             if (!gameState.finishedPlayers.includes(pId)) gameState.finishedPlayers.push(pId);
             
-            let maxP = (gameState.mode === '2p') ? 2 : 4;
+            let maxP = (gameState.mode === '2p') ? 2 : (gameState.mode === '6p' ? 6 : 4);
             let emptySlots = maxP - totalPlayersAtStart;
             let myRank = gameState.finishedPlayers.length - emptySlots;
             let finishedRealPlayers = gameState.finishedPlayers.length - emptySlots;
@@ -740,7 +746,7 @@ function getLobbyState() {
 
 function nextPlayer() {
     let loopCount = 0;
-    let maxP = (gameState.mode === '2p') ? 2 : 4;
+    let maxP = (gameState.mode === '2p') ? 2 : (gameState.mode === '6p' ? 6 : 4);
 
     do {
         gameState.activePlayer = (gameState.activePlayer % maxP) + 1;
