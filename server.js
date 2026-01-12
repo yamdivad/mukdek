@@ -182,12 +182,7 @@ io.on('connection', (socket) => {
         if (socket.id !== hostSocketId) return;
         if (gameState) return;
         
-        let seatedCount = Object.values(players).filter(p => p !== null).length;
-        
-        if (mode === '2p' && seatedCount > 2) return;
-        if ((mode === '4p' || mode === '2p') && seatedCount > 4) return;
-        if (mode === '6p' && seatedCount < 2) return; 
-        
+        // Mode validation occurs at start, allow UI to drive setting for now
         if (['2p', '4p', '6p'].includes(mode)) {
             gameMode = mode;
             io.emit('gameModeUpdate', gameMode);
@@ -199,9 +194,6 @@ io.on('connection', (socket) => {
         if (socket.id !== hostSocketId) return; 
         
         if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 5) return;
-
-        if (gameMode === '2p' && seatIndex >= 2) return;
-        if (gameMode === '4p' && seatIndex >= 4) return;
 
         let pid = seatIndex + 1;
         if (players[pid] === null) {
@@ -317,6 +309,7 @@ io.on('connection', (socket) => {
 
         if (gameMode === '2p' && activeCount !== 2) return; 
         if (gameMode === '4p' && activeCount < 2) return; 
+        if (gameMode === '4p' && activeCount > 4) return; // Strict max 4 for classic
         if (gameMode === '6p' && activeCount < 2) return; 
 
         if (allColors && !gameState) {
@@ -359,8 +352,10 @@ io.on('connection', (socket) => {
         if(botTimeout) clearTimeout(botTimeout);
         
         let seatedCount = Object.values(players).filter(p => p !== null).length;
-        if (gameMode === '2p' && seatedCount > 2) gameMode = '4p';
-        if (gameMode === '4p' && seatedCount > 4) gameMode = '6p';
+        // Logic: if <= 4, default 4p. If > 4, default 6p. 
+        // 2p is usually explicit choice, but defaulting to 4p covers 2-4.
+        if (seatedCount > 4) gameMode = '6p';
+        else gameMode = '4p';
 
         for(let i=1; i<=6; i++) {
             if(players[i]) {
