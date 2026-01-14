@@ -3,7 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const helmet = require('helmet');
 const path = require('path');
-const RoomManager = require('./rooms/RoomManager');
+const GameManager = require('./managers/GameManager');
 
 const app = express();
 const server = http.createServer(app);
@@ -62,18 +62,18 @@ const io = socketIo(server, {
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-const DATA_DIR = path.join(__dirname, 'data');
-const roomManager = new RoomManager(io, DATA_DIR);
+const DATA_DIR = path.join(__dirname, '..', 'server', 'data');
+const gameManager = new GameManager(io, DATA_DIR);
 
 app.get('/restart', (req, res) => {
     const roomId = req.query.room || 'lobby';
-    roomManager.restartRoom(roomId);
+    gameManager.restartRoom(roomId);
     res.redirect(`/?room=${encodeURIComponent(roomId)}`);
 });
 
 io.on('connection', (socket) => {
     const roomId = socket.handshake.query.roomId || 'lobby';
-    const room = roomManager.getRoom(roomId);
+    const room = gameManager.getRoom(roomId);
     room.addSocket(socket);
 });
 

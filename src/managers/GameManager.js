@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const BotAgent = require('./BotAgent');
 const gameLogic = require(path.join(__dirname, '..', '..', 'public', 'js', 'gameLogic.js'));
 
 const RATE_LIMIT_MS = 200;
@@ -89,11 +90,12 @@ class GameRoom {
         this.gameDestructionTimeout = null;
         this.gameMode = '4p';
         this.lightningMode = false;
-        this.botTimeout = null;
 
         this.persistTimeout = null;
         this.persistInFlight = false;
         this.persistQueued = false;
+
+        this.botAgent = new BotAgent(this, gameLogic);
 
         this.loadPersistedState();
     }
@@ -204,6 +206,7 @@ class GameRoom {
     broadcastGameState() {
         this.io.to(this.roomId).emit('gameState', this.gameState);
         this.schedulePersist();
+        this.botAgent.scheduleNextAction();
     }
 
     isRateLimited(playerObj) {
@@ -457,14 +460,12 @@ class GameRoom {
             this.gameState.activePlayer = firstActive;
 
             let maxP = (this.gameMode === '2p') ? 2 : (this.gameMode === '6p' ? 6 : 4);
-            for(let i=1; i<=maxP; i++) {
-                if(this.players[i] === null) this.gameState.finishedPlayers.push(i);
+            for (let i = 1; i <= maxP; i++) {
+                if (this.players[i] === null) this.gameState.finishedPlayers.push(i);
             }
 
             this.io.to(this.roomId).emit('gameStart', this.gameMode);
             this.broadcastGameState();
-
-            this.triggerBotTurn();
         }
     }
 
@@ -476,14 +477,14 @@ class GameRoom {
         console.log(`Game reset requested in room ${this.roomId}.`);
         this.gameState = null;
         this.lightningMode = false;
-        if(this.botTimeout) clearTimeout(this.botTimeout);
+        this.botAgent.clearTimers();
 
         let seatedCount = Object.values(this.players).filter(p => p !== null).length;
         if (seatedCount > 4) this.gameMode = '6p';
         else this.gameMode = '4p';
 
-        for(let i=1; i<=6; i++) {
-            if(this.players[i]) {
+        for (let i = 1; i <= 6; i++) {
+            if (this.players[i]) {
                 this.players[i].ready = this.players[i].isBot || (i === 1);
                 this.players[i].lastAction = 0;
             }
@@ -500,12 +501,7 @@ class GameRoom {
 
         this.lightningMode = !this.lightningMode;
         this.emitLightningStatus();
-
-        if (this.players[this.gameState.activePlayer].isBot) {
-             this.triggerBotTurn();
-        } else {
-             if (this.lightningMode) this.triggerLightningTurn();
-        }
+        this.botAgent.scheduleNextAction();
     }
 
     onRollDice(socket) {
@@ -548,130 +544,26 @@ class GameRoom {
             this.hostSocketId = this.connectedSockets.size > 0 ? this.connectedSockets.values().next().value : null;
             if (!this.gameState && this.hostSocketId) {
                 let newHostEntry = Object.entries(this.players).find(([k, v]) => v && v.id === this.hostSocketId);
-                if(newHostEntry) this.players[newHostEntry[0]].ready = true;
+                if (newHostEntry) this.players[newHostEntry[0]].ready = true;
             }
         }
 
         let seatedCount = Object.values(this.players).filter(p => p !== null).length;
         if (this.gameMode === '2p' && seatedCount > 2) {
-             this.gameMode = '4p';
-             if (seatedCount > 4) this.gameMode = '6p';
-             this.emitGameModeUpdate();
+            this.gameMode = '4p';
+            if (seatedCount > 4) this.gameMode = '6p';
+            this.emitGameModeUpdate();
         }
 
         if (this.connectedSockets.size === 0) {
             this.gameDestructionTimeout = setTimeout(() => {
                 this.gameState = null;
                 this.players = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
+                this.botAgent.clearTimers();
                 this.schedulePersist();
             }, 60000);
         }
         this.emitLobbyUpdate();
-    }
-
-    triggerBotTurn() {
-        if (!this.gameState || this.gameState.phase === 'gameover') return;
-
-        let activeP = this.players[this.gameState.activePlayer];
-        if (!activeP || !activeP.isBot) {
-            if (this.lightningMode) this.triggerLightningTurn();
-            return;
-        }
-
-        if (this.botTimeout) clearTimeout(this.botTimeout);
-
-        let delay = this.lightningMode ? 50 : 2000;
-
-        this.botTimeout = setTimeout(() => {
-            if (!this.gameState || this.gameState.phase === 'gameover') return;
-            if (this.gameState.activePlayer !== parseInt(activeP.name.replace('BOT ','').replace('P',''))) return;
-
-            if (this.gameState.currentRoll === 0) {
-                this.performRollDice(this.gameState.activePlayer);
-                return;
-            }
-
-            if (this.gameState.currentRoll > 0 && this.gameState.movableMarbles.length > 0) {
-                let bestMove = this.decideBotMove(this.gameState.activePlayer);
-                if (bestMove) {
-                    this.performMakeMove(this.gameState.activePlayer, bestMove.marbleId, bestMove.type);
-                }
-            }
-        }, delay);
-    }
-
-    decideBotMove(pid) {
-        let movesMap = this.gameState.possibleMoves;
-        if (movesMap.length === 0) return null;
-
-        let bestScore = -9999;
-        let bestAction = null;
-
-        movesMap.forEach(([mId, moves]) => {
-            let marble = this.gameState.marbles.find(m => m.id === mId);
-
-            moves.forEach(move => {
-                let score = 0;
-
-                let victim = this.gameState.marbles.find(m => m.id !== mId && gameLogic.samePos(m.pos, move.dest));
-                if (victim && victim.player !== pid) {
-                    score += 1000;
-                }
-
-                if (move.type === 'shortcut') score += 500;
-                if (move.type === 'spawn') score += 200;
-
-                let currentProg = this.calculateProgress(pid, marble.pos);
-                let nextProg = this.calculateProgress(pid, move.dest);
-                score += (nextProg - currentProg);
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestAction = { marbleId: mId, type: move.type };
-                }
-            });
-        });
-
-        return bestAction;
-    }
-
-    calculateProgress(pid, pos) {
-        let mode = this.gameState.mode;
-        let pData = gameLogic.MAPS[mode].processedPlayers[pid - 1];
-
-        let homeIdx = pData.home.findIndex(h => gameLogic.samePos(h, pos));
-        if (homeIdx !== -1) return 200 + homeIdx;
-
-        let workIdx = pData.work.findIndex(w => gameLogic.samePos(w, pos));
-        if (workIdx !== -1) return 0;
-
-        let key = gameLogic.coordToKey(pos);
-
-        if (mode === '2p') {
-            let trackIdx = pData.path.indexOf(key);
-            if (trackIdx !== -1) return 10 + trackIdx;
-            if (key === 'E9') return 100;
-        } else if (mode === '6p') {
-            let trackIdx = gameLogic.MAPS['6p'].trackStr.indexOf(key);
-            if (trackIdx !== -1) {
-                let startKey = gameLogic.coordToKey(pData.entry1);
-                let startIdx = gameLogic.MAPS['6p'].trackStr.indexOf(startKey);
-                let dist = (trackIdx - startIdx + gameLogic.MAPS['6p'].trackStr.length) % gameLogic.MAPS['6p'].trackStr.length;
-                return 10 + dist;
-            }
-            if (key === 'H9' || key === 'H11') return 100;
-        } else {
-            let trackIdx = gameLogic.MAPS['4p'].trackStr.indexOf(key);
-            if (trackIdx !== -1) {
-                let startKey = gameLogic.coordToKey(pData.entry1);
-                let startIdx = gameLogic.MAPS['4p'].trackStr.indexOf(startKey);
-                let dist = (trackIdx - startIdx + gameLogic.MAPS['4p'].trackStr.length) % gameLogic.MAPS['4p'].trackStr.length;
-                return 10 + dist;
-            }
-            if (key === 'I9') return 100;
-        }
-
-        return 0;
     }
 
     performRollDice(playerId) {
@@ -691,31 +583,27 @@ class GameRoom {
 
             let maxP = (this.gameState.mode === '2p') ? 2 : (this.gameState.mode === '6p' ? 6 : 4);
             let realPlayerIds = Object.keys(this.players).filter(k => this.players[k] !== null && k <= maxP).map(Number);
-            let allRolled = realPlayerIds.every(pid => this.gameState.initRolls[pid-1] > 0);
+            let allRolled = realPlayerIds.every(pid => this.gameState.initRolls[pid - 1] > 0);
 
             if (allRolled) {
                 let maxRoll = 0;
                 realPlayerIds.forEach(pid => {
-                    if (this.gameState.initRolls[pid-1] > maxRoll) maxRoll = this.gameState.initRolls[pid-1];
+                    if (this.gameState.initRolls[pid - 1] > maxRoll) maxRoll = this.gameState.initRolls[pid - 1];
                 });
                 let winners = [];
                 realPlayerIds.forEach(pid => {
-                    if (this.gameState.initRolls[pid-1] === maxRoll) winners.push(pid);
+                    if (this.gameState.initRolls[pid - 1] === maxRoll) winners.push(pid);
                 });
                 this.gameState.activePlayer = winners[0];
                 const winnerName = this.gameState.playerNames[winners[0]] || `P${winners[0]}`;
                 this.gameState.phase = 'play';
                 this.gameState.message = `${winnerName} starts!`;
                 this.gameState.currentRoll = 0;
-
-                this.triggerBotTurn();
             } else {
                 this.nextPlayer();
                 const nextName = this.gameState.playerNames[this.gameState.activePlayer] || `P${this.gameState.activePlayer}`;
                 this.gameState.message = `${nextName}, roll for order.`;
                 this.gameState.currentRoll = 0;
-
-                this.triggerBotTurn();
             }
         } else {
             let movesMap = [];
@@ -735,18 +623,15 @@ class GameRoom {
                 if (roll === 6 || roll === 1) {
                     this.gameState.message = `Rolled ${roll}. No moves, but Roll Again!`;
                     this.gameState.currentRoll = 0;
-                    this.triggerBotTurn();
                 } else {
                     this.gameState.message = `Rolled ${roll}. No moves.`;
                     setTimeout(() => {
                         this.nextPlayer();
                         this.broadcastGameState();
-                        this.triggerBotTurn();
                     }, 1500);
                 }
             } else {
                 this.gameState.message = `Rolled ${roll}! Move a marble.`;
-                this.triggerBotTurn();
             }
         }
         this.broadcastGameState();
@@ -776,7 +661,7 @@ class GameRoom {
 
                 let pData = gameLogic.MAPS[this.gameState.mode].processedPlayers[victim.player - 1];
                 let emptyWork = pData.work.find(w => !this.gameState.marbles.some(m => gameLogic.samePos(m.pos, w)));
-                if(emptyWork) victim.pos = { ...emptyWork };
+                if (emptyWork) victim.pos = { ...emptyWork };
             }
 
             marble.pos = { ...chosenMove.dest };
@@ -802,9 +687,8 @@ class GameRoom {
                     this.gameState.message = `${pName} takes ${this.getOrdinal(myRank)} Place!`;
                     this.broadcastGameState();
                     setTimeout(() => {
-                         this.nextPlayer();
-                         this.broadcastGameState();
-                         this.triggerBotTurn();
+                        this.nextPlayer();
+                        this.broadcastGameState();
                     }, 2500);
                     return;
                 }
@@ -814,38 +698,12 @@ class GameRoom {
                     this.gameState.currentRoll = 0;
                     this.gameState.movableMarbles = [];
                     this.gameState.possibleMoves = [];
-                    this.triggerBotTurn();
                 } else {
                     this.nextPlayer();
-                    this.triggerBotTurn();
                 }
             }
             this.broadcastGameState();
         }
-    }
-
-    triggerLightningTurn() {
-        if (!this.lightningMode || !this.gameState || this.gameState.phase === 'gameover') return;
-        if (this.players[this.gameState.activePlayer].isBot) return;
-
-        setTimeout(() => {
-            if (!this.lightningMode || !this.gameState || this.gameState.phase === 'gameover') return;
-            if (this.gameState.currentRoll === 0) {
-                this.performRollDice(this.gameState.activePlayer);
-                return;
-            }
-            if (this.gameState.currentRoll > 0 && this.gameState.movableMarbles.length > 0) {
-                if (this.gameState.possibleMoves.length === 1) {
-                    let movesForMarble = this.gameState.possibleMoves[0][1];
-                    if (movesForMarble.length === 1) {
-                        let mId = this.gameState.possibleMoves[0][0];
-                        let mType = movesForMarble[0].type;
-                        this.performMakeMove(this.gameState.activePlayer, mId, mType);
-                        return;
-                    }
-                }
-            }
-        }, 50);
     }
 
     getLobbyState() {
@@ -864,8 +722,8 @@ class GameRoom {
             this.gameState.activePlayer = (this.gameState.activePlayer % maxP) + 1;
             loopCount++;
             if (loopCount > 10) {
-                 this.gameState.phase = 'gameover';
-                 return;
+                this.gameState.phase = 'gameover';
+                return;
             }
         } while (this.gameState.finishedPlayers.includes(this.gameState.activePlayer));
 
@@ -883,4 +741,45 @@ class GameRoom {
     }
 }
 
-module.exports = GameRoom;
+class GameManager {
+    constructor(io, dataDir) {
+        this.io = io;
+        this.dataDir = dataDir;
+        this.rooms = new Map();
+    }
+
+    sanitizeRoomId(roomId) {
+        if (typeof roomId !== 'string') return 'lobby';
+        const cleaned = roomId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+        if (!cleaned) return 'lobby';
+        return cleaned.slice(0, 32);
+    }
+
+    getRoom(roomId) {
+        const safeId = this.sanitizeRoomId(roomId);
+        let room = this.rooms.get(safeId);
+        if (!room) {
+            room = new GameRoom(this.io, safeId, this.dataDir);
+            this.rooms.set(safeId, room);
+        }
+        return room;
+    }
+
+    restartRoom(roomId) {
+        const safeId = this.sanitizeRoomId(roomId);
+        const fileBase = `room-${safeId}`;
+        const stateFile = path.join(this.dataDir, `${fileBase}.json`);
+        const tmpFile = path.join(this.dataDir, `${fileBase}.json.tmp`);
+
+        this.rooms.delete(safeId);
+
+        try { fs.unlinkSync(stateFile); } catch (err) {
+            if (err.code !== 'ENOENT') console.error(err);
+        }
+        try { fs.unlinkSync(tmpFile); } catch (err) {
+            if (err.code !== 'ENOENT') console.error(err);
+        }
+    }
+}
+
+module.exports = GameManager;
