@@ -16,20 +16,29 @@
             
             <div class="lobby-section ls-header">
                 <h1>Mukdek: Digital Edition</h1>
-                <div class="room-controls">
-                    <label for="room-input" class="room-label">Room</label>
-                    <input id="room-input" type="text" placeholder="room-id" maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false">
-                    <button id="room-join-btn" type="button">GO</button>
-                    <button id="room-create-btn" type="button">NEW</button>
-                    <button id="room-copy-btn" type="button">COPY LINK</button>
-                </div>
-                <div class="room-list">
-                    <div class="room-list-header">
-                        <span>Active Rooms</span>
-                        <button id="room-refresh-btn" type="button">REFRESH</button>
+            </div>
+
+            <div class="lobby-section ls-rooms">
+                <button id="rooms-toggle" class="rooms-toggle" type="button" aria-expanded="false" aria-controls="rooms-panel">
+                    Rooms
+                    <span class="rooms-toggle-icon" aria-hidden="true">+</span>
+                </button>
+                <div id="rooms-panel" class="rooms-panel" aria-hidden="true">
+                    <div class="room-controls">
+                        <label for="room-input" class="room-label">Room</label>
+                        <input id="room-input" type="text" placeholder="room-id" maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false">
+                        <button id="room-join-btn" type="button">GO</button>
+                        <button id="room-create-btn" type="button">NEW</button>
+                        <button id="room-copy-btn" type="button">COPY LINK</button>
                     </div>
-                    <div id="room-refresh-hint">Updated just now</div>
-                    <div id="room-list-body">Loading...</div>
+                    <div class="room-list">
+                        <div class="room-list-header">
+                            <span>Active Rooms</span>
+                            <button id="room-refresh-btn" type="button">REFRESH</button>
+                        </div>
+                        <div id="room-refresh-hint">Updated just now</div>
+                        <div id="room-list-body">Loading...</div>
+                    </div>
                 </div>
             </div>
 
@@ -84,6 +93,27 @@
             <div class="room-name-actions">
                 <button id="room-name-confirm" class="modal-btn btn-yes" type="button">CREATE</button>
                 <button id="room-name-cancel" class="modal-btn btn-no" type="button">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="confirm-modal" aria-hidden="true">
+        <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h2 id="confirm-title">Confirm</h2>
+            <p id="confirm-message" class="confirm-message"></p>
+            <div class="confirm-actions">
+                <button id="confirm-yes" class="modal-btn btn-yes" type="button">YES</button>
+                <button id="confirm-no" class="modal-btn btn-no" type="button">NO</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notice-modal" class="confirm-modal" aria-hidden="true">
+        <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="notice-title">
+            <h2 id="notice-title">Notice</h2>
+            <p id="notice-message" class="confirm-message"></p>
+            <div class="confirm-actions">
+                <button id="notice-ok" class="modal-btn btn-yes" type="button">OK</button>
             </div>
         </div>
     </div>

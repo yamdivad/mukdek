@@ -1,7 +1,12 @@
 const Mukdek = window.Mukdek = window.Mukdek || {};
-const roomParam = new URLSearchParams(window.location.search).get('room');
+const urlParams = new URLSearchParams(window.location.search);
+const roomParam = urlParams.get('room');
+const spectateParam = urlParams.get('spectate');
 Mukdek.roomId = (roomParam || 'lobby').trim();
 if (!Mukdek.roomId) Mukdek.roomId = 'lobby';
+Mukdek.isSpectating = spectateParam === '1';
+Mukdek.isExplicitRoom = roomParam !== null;
+Mukdek.allRoomsInProgress = false;
 
 if (typeof io === 'function') {
     Mukdek.socket = io({ query: { roomId: Mukdek.roomId } });
@@ -52,6 +57,11 @@ if (Mukdek.socket) {
     Mukdek.socket.on('connect', () => {
         console.log("Connected with session:", Mukdek.mySessionId);
         Mukdek.socket.emit('register', Mukdek.mySessionId);
+        setTimeout(() => {
+            if (typeof Mukdek.refreshRooms === 'function') {
+                Mukdek.refreshRooms();
+            }
+        }, 500);
     });
 
     Mukdek.socket.on('connect_error', () => {
@@ -101,13 +111,25 @@ Mukdek.dom = {
     roomNameModal: document.getElementById('room-name-modal'),
     roomNameInput: document.getElementById('room-name-input'),
     roomNameConfirm: document.getElementById('room-name-confirm'),
-    roomNameCancel: document.getElementById('room-name-cancel')
+    roomNameCancel: document.getElementById('room-name-cancel'),
+    confirmModal: document.getElementById('confirm-modal'),
+    confirmTitle: document.getElementById('confirm-title'),
+    confirmMessage: document.getElementById('confirm-message'),
+    confirmYes: document.getElementById('confirm-yes'),
+    confirmNo: document.getElementById('confirm-no'),
+    noticeModal: document.getElementById('notice-modal'),
+    noticeTitle: document.getElementById('notice-title'),
+    noticeMessage: document.getElementById('notice-message'),
+    noticeOk: document.getElementById('notice-ok'),
+    roomsToggle: document.getElementById('rooms-toggle'),
+    roomsPanel: document.getElementById('rooms-panel')
 };
 
 Mukdek.pendingShortcutMarbleId = null;
 Mukdek.pendingShortcutMoves = null;
 Mukdek.isFirstStatusLoad = true;
 Mukdek.pendingRoomSuggestion = null;
+Mukdek.pendingConfirmAction = null;
 
 Mukdek.colorPalette = [
     { name: "Red", hex: "#e74c3c" },
@@ -170,9 +192,10 @@ Mukdek.renderRoomList = function renderRoomList(rooms) {
         label.textContent = `${room.roomId} • ${room.seatedCount} players • ${status}`;
 
         const joinBtn = document.createElement('button');
-        joinBtn.textContent = 'JOIN';
+        joinBtn.textContent = room.hasGame ? 'SPECTATE' : 'JOIN';
         joinBtn.addEventListener('click', () => {
-            window.location.href = `/?room=${encodeURIComponent(room.roomId)}`;
+            const spectate = room.hasGame ? '&spectate=1' : '';
+            window.location.href = `/?room=${encodeURIComponent(room.roomId)}${spectate}`;
         });
 
         item.appendChild(label);
@@ -187,8 +210,14 @@ Mukdek.refreshRooms = function refreshRooms() {
     fetch('/rooms')
         .then((res) => res.json())
         .then((data) => {
-            Mukdek.renderRoomList(Array.isArray(data.rooms) ? data.rooms : []);
+            const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+            Mukdek.renderRoomList(rooms);
             Mukdek.updateRoomRefreshHint();
+            Mukdek.allRoomsInProgress = rooms.length > 0 && rooms.every((room) => room.hasGame);
+            Mukdek.updateJoinButtonForRooms();
+            if (Mukdek.allRoomsInProgress || (Mukdek.roomsHasLobby && Mukdek.roomsHasGame)) {
+                Mukdek.setRoomsPanelOpen(true, { refresh: false });
+            }
         })
         .catch(() => {
             Mukdek.dom.roomListBody.textContent = 'Unable to load rooms.';
@@ -211,6 +240,31 @@ Mukdek.updateRoomRefreshHint = function updateRoomRefreshHint(isError = false) {
     const mm = String(now.getMinutes()).padStart(2, '0');
     const ss = String(now.getSeconds()).padStart(2, '0');
     Mukdek.dom.roomRefreshHint.textContent = `Updated at ${hh}:${mm}:${ss}`;
+};
+
+Mukdek.setRoomsPanelOpen = function setRoomsPanelOpen(isOpen, options = {}) {
+    if (!Mukdek.dom.roomsPanel || !Mukdek.dom.roomsToggle) return;
+    const next = Boolean(isOpen);
+    Mukdek.dom.roomsPanel.classList.toggle('active', next);
+    Mukdek.dom.roomsToggle.classList.toggle('is-open', next);
+    Mukdek.dom.roomsToggle.setAttribute('aria-expanded', String(next));
+    Mukdek.dom.roomsPanel.setAttribute('aria-hidden', String(!next));
+    const shouldRefresh = options.refresh !== false;
+    if (next && shouldRefresh) Mukdek.refreshRooms();
+};
+
+Mukdek.updateJoinButtonForRooms = function updateJoinButtonForRooms() {
+    if (!Mukdek.dom.lobbyJoinUI || !Mukdek.dom.lobbyJoinUI.style) return;
+    const joinBtn = document.getElementById('join-btn');
+    if (!joinBtn) return;
+    if (Mukdek.myPlayerId === null && Mukdek.allRoomsInProgress) {
+        joinBtn.disabled = false;
+        joinBtn.textContent = 'NEW GAME';
+        return;
+    }
+    if (joinBtn.textContent === 'NEW GAME') {
+        joinBtn.textContent = 'JOIN GAME';
+    }
 };
 
 Mukdek.openRoomNameModal = function openRoomNameModal() {
@@ -238,4 +292,53 @@ Mukdek.confirmRoomName = function confirmRoomName() {
     }
     Mukdek.closeRoomNameModal();
     window.location.href = `/?room=${encodeURIComponent(roomId)}`;
+};
+
+Mukdek.openConfirmModal = function openConfirmModal(options) {
+    if (!Mukdek.dom.confirmModal) return;
+    const title = options && options.title ? options.title : 'Confirm';
+    const message = options && options.message ? options.message : 'Are you sure?';
+    const confirmText = options && options.confirmText ? options.confirmText : 'YES';
+    const cancelText = options && options.cancelText ? options.cancelText : 'NO';
+
+    if (Mukdek.dom.confirmTitle) Mukdek.dom.confirmTitle.textContent = title;
+    if (Mukdek.dom.confirmMessage) Mukdek.dom.confirmMessage.textContent = message;
+    if (Mukdek.dom.confirmYes) Mukdek.dom.confirmYes.textContent = confirmText;
+    if (Mukdek.dom.confirmNo) Mukdek.dom.confirmNo.textContent = cancelText;
+
+    Mukdek.pendingConfirmAction = options && options.onConfirm ? options.onConfirm : null;
+    Mukdek.dom.confirmModal.classList.add('active');
+    Mukdek.dom.confirmModal.setAttribute('aria-hidden', 'false');
+};
+
+Mukdek.closeConfirmModal = function closeConfirmModal() {
+    if (!Mukdek.dom.confirmModal) return;
+    Mukdek.dom.confirmModal.classList.remove('active');
+    Mukdek.dom.confirmModal.setAttribute('aria-hidden', 'true');
+    Mukdek.pendingConfirmAction = null;
+};
+
+Mukdek.confirmModalYes = function confirmModalYes() {
+    if (typeof Mukdek.pendingConfirmAction === 'function') {
+        Mukdek.pendingConfirmAction();
+    }
+    Mukdek.closeConfirmModal();
+};
+
+Mukdek.openNoticeModal = function openNoticeModal(options) {
+    if (!Mukdek.dom.noticeModal) return;
+    const title = options && options.title ? options.title : 'Notice';
+    const message = options && options.message ? options.message : '';
+
+    if (Mukdek.dom.noticeTitle) Mukdek.dom.noticeTitle.textContent = title;
+    if (Mukdek.dom.noticeMessage) Mukdek.dom.noticeMessage.textContent = message;
+
+    Mukdek.dom.noticeModal.classList.add('active');
+    Mukdek.dom.noticeModal.setAttribute('aria-hidden', 'false');
+};
+
+Mukdek.closeNoticeModal = function closeNoticeModal() {
+    if (!Mukdek.dom.noticeModal) return;
+    Mukdek.dom.noticeModal.classList.remove('active');
+    Mukdek.dom.noticeModal.setAttribute('aria-hidden', 'true');
 };

@@ -9,6 +9,9 @@ if (!M.socket) {
 M.socket.on('gameModeUpdate', (mode) => {
     M.currentGameMode = mode;
     document.body.classList.toggle('mode-6p', mode === '6p');
+    if (typeof M.syncBoardOrientation === 'function') {
+        M.syncBoardOrientation();
+    }
     let btn2 = document.getElementById('btn-mode-2p');
     let btn4 = document.getElementById('btn-mode-4p');
     let btn6 = document.getElementById('btn-mode-6p');
@@ -159,6 +162,7 @@ M.socket.on('lobbyUpdate', (state) => {
 
     if (mySlot) {
         M.myPlayerId = parseInt(mySlot[0]);
+        M.isSpectating = false;
         let pData = mySlot[1];
         M.myColor = pData.color;
         let isMeReady = pData.ready;
@@ -228,6 +232,10 @@ M.socket.on('lobbyUpdate', (state) => {
         }
     }
 
+    if (typeof M.updateJoinButtonForRooms === 'function') {
+        M.updateJoinButtonForRooms();
+    }
+
     if (M.socket.id === state.hostId) {
         let seated = Object.values(state.players).filter(p => p !== null);
         let allReady = seated.length >= 2 && seated.every(p => p.color !== null);
@@ -267,8 +275,13 @@ M.socket.on('lobbyUpdate', (state) => {
 });
 
 M.socket.on('kicked', () => {
-    alert("You have been removed from the lobby by the Host.");
-    location.reload();
+    M.openNoticeModal({
+        title: 'Removed',
+        message: 'You have been removed from the lobby by the Host.'
+    });
+    setTimeout(() => {
+        location.reload();
+    }, 1200);
 });
 
 M.socket.on('murder', (data) => {
@@ -343,8 +356,9 @@ M.renderState = function renderState(state) {
     }
 
     const canEnableMenu = (state.phase !== 'gameover');
-    if (M.dom.menuLightning) M.dom.menuLightning.disabled = !canEnableMenu;
-    if (M.dom.menuRestart) M.dom.menuRestart.disabled = !canEnableMenu;
+    const isSpectator = M.myPlayerId === null;
+    if (M.dom.menuLightning) M.dom.menuLightning.disabled = !canEnableMenu || isSpectator;
+    if (M.dom.menuRestart) M.dom.menuRestart.disabled = !canEnableMenu || isSpectator;
 
     document.getElementById('message').textContent = state.message;
     const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
@@ -502,7 +516,12 @@ M.renderState = function renderState(state) {
 M.socket.on('gameStart', (mode) => {
     M.currentGameMode = mode;
     document.body.classList.toggle('mode-6p', mode === '6p');
-    M.dom.lobbyOverlay.style.display = 'none';
+    if (typeof M.syncBoardOrientation === 'function') {
+        M.syncBoardOrientation();
+    }
+    if (M.myPlayerId !== null || M.isSpectating || M.isExplicitRoom) {
+        M.dom.lobbyOverlay.style.display = 'none';
+    }
     M.celebratedPlayers.clear();
     M.initBoard(mode);
 });

@@ -521,6 +521,8 @@ class GameRoom {
 
     onToggleLightning(socket) {
         if (!this.gameState) return;
+        let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
+        if (!pEntry || this.players[pEntry[0]].isBot) return;
         this.markActive();
 
         this.lightningMode = !this.lightningMode;
@@ -585,6 +587,7 @@ class GameRoom {
 
         if (this.connectedSockets.size === 0) {
             this.gameDestructionTimeout = setTimeout(() => {
+                if (this.connectedSockets.size > 0) return;
                 this.gameState = null;
                 this.players = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
                 this.botAgent.clearTimers();
@@ -654,6 +657,7 @@ class GameRoom {
                 } else {
                     this.gameState.message = `Rolled ${roll}. No moves.`;
                     setTimeout(() => {
+                        if (!this.gameState) return;
                         this.nextPlayer();
                         this.broadcastGameState();
                     }, 1500);
@@ -715,6 +719,7 @@ class GameRoom {
                     this.gameState.message = `${pName} takes ${this.getOrdinal(myRank)} Place!`;
                     this.broadcastGameState();
                     setTimeout(() => {
+                        if (!this.gameState) return;
                         this.nextPlayer();
                         this.broadcastGameState();
                     }, 2500);
@@ -743,6 +748,7 @@ class GameRoom {
     }
 
     nextPlayer() {
+        if (!this.gameState) return;
         let loopCount = 0;
         let maxP = (this.gameState.mode === '2p') ? 2 : (this.gameState.mode === '6p' ? 6 : 4);
 

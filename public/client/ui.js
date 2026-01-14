@@ -10,10 +10,16 @@ M.claimHostManual = function claimHostManual() {
 };
 
 M.kickPlayer = function kickPlayer(pid) {
-    if(confirm(`Are you sure you want to remove Player ${pid}?`)) {
-        M.socket.emit('removeBot', pid - 1);
-        M.socket.emit('kickPlayer', pid);
-    }
+    M.openConfirmModal({
+        title: 'Remove Player',
+        message: `Remove Player ${pid} from the lobby?`,
+        confirmText: 'REMOVE',
+        cancelText: 'CANCEL',
+        onConfirm: () => {
+            M.socket.emit('removeBot', pid - 1);
+            M.socket.emit('kickPlayer', pid);
+        }
+    });
 };
 
 M.addBot = function addBot(pid) {
@@ -60,10 +66,16 @@ M.toggleStats = function toggleStats() {
 };
 
 M.triggerReset = function triggerReset() {
-    if (confirm("Are you sure you want to restart the game?")) {
-        M.socket.emit('resetGame');
-        M.setMainMenuOpen(false);
-    }
+    M.openConfirmModal({
+        title: 'Restart Game',
+        message: 'Are you sure you want to restart the game?',
+        confirmText: 'RESTART',
+        cancelText: 'CANCEL',
+        onConfirm: () => {
+            M.socket.emit('resetGame');
+            M.setMainMenuOpen(false);
+        }
+    });
 };
 
 M.toggleLightning = function toggleLightning() {
@@ -98,6 +110,10 @@ M.initLobbyUI = function initLobbyUI() {
 
 M.joinGame = function joinGame() {
     if (!M.socket) return;
+    if (M.allRoomsInProgress) {
+        M.createRoom();
+        return;
+    }
     M.socket.emit('joinGame', M.mySessionId);
 };
 M.selectColor = function selectColor(index) {
@@ -124,17 +140,29 @@ M.updateIdentity = function updateIdentity(pid, colorHex, pName) {
     M.dom.banner.style.backgroundColor = colorHex;
     M.dom.banner.style.color = M.getContrastColor(colorHex);
 
+    M.syncBoardOrientation(pid);
+};
+
+M.syncBoardOrientation = function syncBoardOrientation(pid) {
+    const activePid = pid || M.myPlayerId;
     let rotation = 0;
-    if (M.currentGameMode === '4p') {
-        switch(pid) {
+    if (M.currentGameMode === '4p' && activePid) {
+        switch(activePid) {
             case 1: rotation = 180; break;
             case 2: rotation = 90; break;
             case 3: rotation = 0; break;
             case 4: rotation = 270; break;
         }
     }
-    M.dom.container.style.transform = `rotate(${rotation}deg)`;
-    M.dom.shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
+    if (M.dom.container) {
+        M.dom.container.style.transform = `rotate(${rotation}deg)`;
+    }
+    if (M.dom.shortcutModal) {
+        M.dom.shortcutModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
+    }
+    if (M.dom.shortcutTargetModal && !M.dom.shortcutTargetModal.classList.contains('active')) {
+        M.dom.shortcutTargetModal.style.transform = `translate(-50%, -50%) rotate(${-rotation}deg) scale(0)`;
+    }
 };
 
 M.checkForLeader = function checkForLeader(marbles) {

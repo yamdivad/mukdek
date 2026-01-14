@@ -22,6 +22,12 @@ if (M.dom.roomCreateBtn) {
 if (M.dom.roomCopyBtn) {
     M.dom.roomCopyBtn.addEventListener('click', () => M.copyRoomLink());
 }
+if (M.dom.roomsToggle && M.dom.roomsPanel) {
+    M.dom.roomsToggle.addEventListener('click', () => {
+        const isOpen = M.dom.roomsPanel.classList.contains('active');
+        M.setRoomsPanelOpen(!isOpen, { refresh: true });
+    });
+}
 if (M.dom.roomRefreshBtn) {
     M.dom.roomRefreshBtn.addEventListener('click', () => M.refreshRooms());
 }
@@ -50,6 +56,25 @@ if (M.dom.roomNameInput) {
             event.preventDefault();
             M.confirmRoomName();
         }
+    });
+}
+if (M.dom.confirmYes) {
+    M.dom.confirmYes.addEventListener('click', () => M.confirmModalYes());
+}
+if (M.dom.confirmNo) {
+    M.dom.confirmNo.addEventListener('click', () => M.closeConfirmModal());
+}
+if (M.dom.confirmModal) {
+    M.dom.confirmModal.addEventListener('click', (event) => {
+        if (event.target === M.dom.confirmModal) M.closeConfirmModal();
+    });
+}
+if (M.dom.noticeOk) {
+    M.dom.noticeOk.addEventListener('click', () => M.closeNoticeModal());
+}
+if (M.dom.noticeModal) {
+    M.dom.noticeModal.addEventListener('click', (event) => {
+        if (event.target === M.dom.noticeModal) M.closeNoticeModal();
     });
 }
 
@@ -132,6 +157,12 @@ document.addEventListener('keydown', (event) => {
     if (M.uiState.mainMenuOpen) M.setMainMenuOpen(false);
     if (M.dom.roomNameModal && M.dom.roomNameModal.classList.contains('active')) {
         M.closeRoomNameModal();
+    }
+    if (M.dom.confirmModal && M.dom.confirmModal.classList.contains('active')) {
+        M.closeConfirmModal();
+    }
+    if (M.dom.noticeModal && M.dom.noticeModal.classList.contains('active')) {
+        M.closeNoticeModal();
     }
     if (M.dom.shortcutTargetModal && M.dom.shortcutTargetModal.classList.contains('active')) {
         M.hideShortcutTargetModal();
