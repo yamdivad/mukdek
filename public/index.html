@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Mukdek</title>
+    
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" id="dynamic-favicon">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+    
+    <div id="lobby-overlay">
+        <div class="lobby-content">
+            
+            <div class="lobby-section ls-header">
+                <h1>Mukdek: Digital Edition</h1>
+            </div>
+
+            <div class="lobby-section ls-identity">
+                <div id="lobby-ui-join" style="display:block;">
+                    <p style="color:#d7ccc8; margin-bottom:15px;">Waiting to join...</p>
+                    <button id="join-btn" onclick="Mukdek.joinGame()">JOIN GAME</button>
+                </div>
+
+                <div id="lobby-ui-select" style="display:none;">
+                    <p style="color:white; margin-bottom: 5px;">You are <strong>Player <span id="lobby-pid">?</span></strong></p>
+                    <input type="text" id="name-input" placeholder="INITIALS" maxlength="3">
+                    <p style="color:#d7ccc8; font-size: 0.9em; margin-top:10px;">Choose your marble color:</p>
+                    <div class="color-grid" id="color-container"></div>
+                </div>
+            </div>
+
+            <div class="lobby-section ls-state">
+                <p style="color:#d7ccc8; font-size: 0.9em; margin-bottom:5px;">PLAYERS & BOTS:</p>
+                <div id="ready-tracker">
+                    <div id="tk-1" class="tracker-slot" title="Player 1"></div>
+                    <div id="tk-2" class="tracker-slot" title="Player 2"></div>
+                    <div id="tk-3" class="tracker-slot" title="Player 3"></div>
+                    <div id="tk-4" class="tracker-slot" title="Player 4"></div>
+                    <div id="tk-5" class="tracker-slot" title="Player 5"></div>
+                    <div id="tk-6" class="tracker-slot" title="Player 6"></div>
+                </div>
+
+                <div id="mode-selector">
+                    <button id="btn-mode-2p" class="mode-btn visible" style="background:#2e7d32;" onclick="Mukdek.selectMode('2p')">DUEL (2P)</button>
+                    <button id="btn-mode-4p" class="mode-btn visible" style="background:#a1887f;" onclick="Mukdek.selectMode('4p')">CLASSIC (4P)</button>
+                    <button id="btn-mode-6p" class="mode-btn" style="background:#a1887f;" onclick="Mukdek.selectMode('6p')">CHAOS (6P)</button>
+                </div>
+            </div>
+
+            <div class="lobby-section ls-actions">
+                <div id="lobby-msg" style="margin-bottom:10px; font-style:italic; color:#d7ccc8">Waiting for others...</div>
+                
+                <button id="ready-btn" style="display:none;" onclick="Mukdek.clickReady(true)">I'M READY</button>
+                <button id="start-btn" style="display:none;" onclick="Mukdek.requestStart()">START GAME</button>
+                <button id="claim-host-btn" onclick="Mukdek.claimHostManual()">CLAIM HOST 👑</button>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="game-header">
+        <span class="header-spacer" aria-hidden="true"></span>
+        <span id="identity-text">MUKDEK</span>
+        <div class="header-actions">
+            <button id="menu-btn" class="icon-btn menu-btn" type="button" aria-label="Open menu" aria-controls="main-menu" aria-expanded="false">
+                <span class="menu-line"></span>
+                <span class="menu-line"></span>
+                <span class="menu-line"></span>
+            </button>
+        </div>
+        
+        <div id="main-menu" role="menu" aria-label="Main menu" aria-hidden="true">
+            <button id="menu-stats" type="button">GAME STATS</button>
+            <button id="menu-lightning" type="button">ENABLE LIGHTNING</button>
+            <button id="menu-restart" type="button">RESTART GAME</button>
+        </div>
+    </div>
+
+    <div id="target-pop">TARGET!<br>TARGET!<br>TARGET!<span id="target-name">PLAYER X IS LEADING</span></div>
+    <div id="lightning-pop">LIGHTNING MODE<br>ACTIVATED!</div>
+
+    <div id="game-area">
+        <div id="sidebar">
+            <div class="status">
+                <div class="player-status" id="p1"><strong>P1</strong><span class="home-count"><span id="h1">0</span>/5</span></div>
+                <div class="player-status" id="p2"><strong>P2</strong><span class="home-count"><span id="h2">0</span>/5</span></div>
+                <div class="player-status" id="p3"><strong>P3</strong><span class="home-count"><span id="h3">0</span>/5</span></div>
+                <div class="player-status" id="p4"><strong>P4</strong><span class="home-count"><span id="h4">0</span>/5</span></div>
+                <div class="player-status" id="p5"><strong>P5</strong><span class="home-count"><span id="h5">0</span>/5</span></div>
+                <div class="player-status" id="p6"><strong>P6</strong><span class="home-count"><span id="h6">0</span>/5</span></div>
+            </div>
+
+            <div id="controls">
+                <div id="dice">🎲</div>
+                <button id="roll-btn" class="btn-base" disabled>Wait for Game</button>
+            </div>
+            <div id="message" style="text-align:center; font-weight:bold; color:#5d4037; margin-top:5px; min-height:1.2em;">Waiting for start...</div>
+
+            <div id="stats-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stats-title">
+                <div class="modal-content">
+                    <h2 id="stats-title">Game Stats</h2>
+                    <div id="stats-body">Waiting for data...</div>
+                    <button id="stats-close-btn" class="btn-base" type="button" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="board-container">
+            <div id="board"></div>
+            <div id="shortcut-modal">
+                <h2>Shortcut Available!</h2>
+                <p style="color:white; margin-bottom:15px;">Do you want to take the center shortcut?</p>
+                <button class="modal-btn btn-yes" onclick="Mukdek.confirmShortcut(true)">YES!</button>
+                <button class="modal-btn btn-no" onclick="Mukdek.confirmShortcut(false)">NO</button>
+            </div>
+            <div id="shortcut-target-modal">
+                <h2>Choose a Target</h2>
+                <div id="shortcut-target-options" class="shortcut-target-options"></div>
+                <button id="shortcut-target-cancel" class="modal-btn btn-no">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="turn-audio" src="assets/player-turn.mp3" preload="auto"></audio>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/gameLogic.js"></script>
+    <script src="client/state.js"></script>
+    <script src="client/ui.js"></script>
+    <script src="client/board.js"></script>
+    <script src="client/socket.js"></script>
+    <script src="client/main.js"></script>
+</body>
+</html>

@@ -117,6 +117,14 @@
             if(p.path) p.pathCoords = p.path.map(posToCoord);
             return p;
         });
+        if (mode === '6p') {
+            let keys = [];
+            m.players.forEach(p => {
+                if (p.targetShortcutStr) keys.push(p.targetShortcutStr);
+            });
+            let uniq = [...new Set(keys)];
+            m.shortcutCoords = uniq.map(posToCoord);
+        }
         
         if (mode === '4p' || mode === '6p') {
             m.trackNext = new Map();
@@ -217,17 +225,42 @@
         // Shortcut Logic
         // Use specific target shortcut if defined (6p), else default (4p/2p)
         let shortcutCoord = pData.targetShortcut || mapData.shortcutCoord;
+        let shortcutCoords = (mode === '6p' && mapData.shortcutCoords) ? mapData.shortcutCoords : [shortcutCoord];
+        let isOnShortcut = (mode === '6p') ? shortcutCoords.some(c => samePos(startPos, c)) : samePos(startPos, shortcutCoord);
         
         // Enter Shortcut (Roll 1)
         if (roll === 1 && samePos(startPos, pData.shortcutEntry)) {
-            let dest = shortcutCoord;
-            if (!hasOwnAt(marbles, playerId, dest) && !isProtectedPos(mode, marbles, dest, playerId)) {
-                moves.push({ dest: dest, type: 'shortcut' });
+            if (mode === '6p') {
+                let occupied = shortcutCoords.map(c => marbles.find(m => samePos(m.pos, c)) ? c : null).filter(Boolean);
+                let empty = shortcutCoords.filter(c => !marbles.some(m => samePos(m.pos, c)));
+
+                if (empty.length === 1) {
+                    let dest = empty[0];
+                    if (!hasOwnAt(marbles, playerId, dest) && !isProtectedPos(mode, marbles, dest, playerId)) {
+                        moves.push({ dest: dest, type: 'shortcut' });
+                    }
+                } else if (empty.length === 2) {
+                    let dest = shortcutCoord;
+                    if (!hasOwnAt(marbles, playerId, dest) && !isProtectedPos(mode, marbles, dest, playerId)) {
+                        moves.push({ dest: dest, type: 'shortcut' });
+                    }
+                } else if (occupied.length === 2) {
+                    shortcutCoords.forEach(dest => {
+                        if (!hasOwnAt(marbles, playerId, dest) && !isProtectedPos(mode, marbles, dest, playerId)) {
+                            moves.push({ dest: dest, type: 'shortcut' });
+                        }
+                    });
+                }
+            } else {
+                let dest = shortcutCoord;
+                if (!hasOwnAt(marbles, playerId, dest) && !isProtectedPos(mode, marbles, dest, playerId)) {
+                    moves.push({ dest: dest, type: 'shortcut' });
+                }
             }
         }
 
         // Exit Shortcut (Roll 1)
-        if (roll === 1 && samePos(startPos, shortcutCoord)) {
+        if (roll === 1 && isOnShortcut) {
             let dest = pData.shortcutExit;
             if (!hasOwnAt(marbles, playerId, dest) && !isProtectedPos(mode, marbles, dest, playerId)) {
                 moves.push({ dest: dest, type: 'exit' });
@@ -235,7 +268,7 @@
         }
 
         // Normal Movement
-        if (!samePos(startPos, shortcutCoord)) {
+        if (!isOnShortcut) {
             let advancePath = computeAdvancePath(mode, startPos, roll, pData);
             if (advancePath) {
                 let dest = advancePath[advancePath.length - 1];
