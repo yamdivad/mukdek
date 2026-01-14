@@ -154,6 +154,55 @@ body.mode-6p #board-container {
     color: #fff;
 }
 
+.room-name-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 12, 10, 0.7);
+    z-index: 2100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease-in-out;
+}
+.room-name-modal.active {
+    opacity: 1;
+    pointer-events: all;
+}
+.room-name-card {
+    width: min(90vw, 420px);
+    background: rgba(62, 39, 35, 0.98);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 18px;
+    padding: 22px;
+    text-align: center;
+    color: #fff;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+}
+.room-name-card h2 {
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+}
+.room-name-subtitle {
+    color: #d7ccc8;
+    font-size: 0.9em;
+    margin-bottom: 14px;
+}
+#room-name-input {
+    width: 80%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: none;
+    text-align: center;
+    text-transform: lowercase;
+    font-size: 1.1em;
+}
+.room-name-actions {
+    margin-top: 16px;
+}
+
 /* Section 2: Identity (Round inputs) */
 .ls-identity { }
 

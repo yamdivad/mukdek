@@ -97,12 +97,17 @@ Mukdek.dom = {
     roomCopyBtn: document.getElementById('room-copy-btn'),
     roomRefreshBtn: document.getElementById('room-refresh-btn'),
     roomListBody: document.getElementById('room-list-body'),
-    roomRefreshHint: document.getElementById('room-refresh-hint')
+    roomRefreshHint: document.getElementById('room-refresh-hint'),
+    roomNameModal: document.getElementById('room-name-modal'),
+    roomNameInput: document.getElementById('room-name-input'),
+    roomNameConfirm: document.getElementById('room-name-confirm'),
+    roomNameCancel: document.getElementById('room-name-cancel')
 };
 
 Mukdek.pendingShortcutMarbleId = null;
 Mukdek.pendingShortcutMoves = null;
 Mukdek.isFirstStatusLoad = true;
+Mukdek.pendingRoomSuggestion = null;
 
 Mukdek.colorPalette = [
     { name: "Red", hex: "#e74c3c" },
@@ -134,14 +139,7 @@ Mukdek.joinRoomFromInput = function joinRoomFromInput() {
 };
 
 Mukdek.createRoom = function createRoom() {
-    const suggestion = `${Math.random().toString(36).slice(2, 6)}${Date.now().toString(36).slice(-2)}`;
-    const input = window.prompt('Name your room:', suggestion);
-    if (input === null) return;
-    let roomId = Mukdek.cleanRoomId(input);
-    if (!roomId) {
-        roomId = Mukdek.cleanRoomId(suggestion);
-    }
-    window.location.href = `/?room=${encodeURIComponent(roomId)}`;
+    Mukdek.openRoomNameModal();
 };
 
 Mukdek.copyRoomLink = function copyRoomLink() {
@@ -213,4 +211,31 @@ Mukdek.updateRoomRefreshHint = function updateRoomRefreshHint(isError = false) {
     const mm = String(now.getMinutes()).padStart(2, '0');
     const ss = String(now.getSeconds()).padStart(2, '0');
     Mukdek.dom.roomRefreshHint.textContent = `Updated at ${hh}:${mm}:${ss}`;
+};
+
+Mukdek.openRoomNameModal = function openRoomNameModal() {
+    if (!Mukdek.dom.roomNameModal || !Mukdek.dom.roomNameInput) return;
+    Mukdek.pendingRoomSuggestion = `${Math.random().toString(36).slice(2, 6)}${Date.now().toString(36).slice(-2)}`;
+    Mukdek.dom.roomNameInput.value = Mukdek.pendingRoomSuggestion;
+    Mukdek.dom.roomNameModal.classList.add('active');
+    Mukdek.dom.roomNameModal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => Mukdek.dom.roomNameInput.focus(), 0);
+};
+
+Mukdek.closeRoomNameModal = function closeRoomNameModal() {
+    if (!Mukdek.dom.roomNameModal) return;
+    Mukdek.dom.roomNameModal.classList.remove('active');
+    Mukdek.dom.roomNameModal.setAttribute('aria-hidden', 'true');
+    Mukdek.pendingRoomSuggestion = null;
+};
+
+Mukdek.confirmRoomName = function confirmRoomName() {
+    if (!Mukdek.dom.roomNameInput) return;
+    const input = Mukdek.dom.roomNameInput.value;
+    let roomId = Mukdek.cleanRoomId(input);
+    if (!roomId) {
+        roomId = Mukdek.cleanRoomId(Mukdek.pendingRoomSuggestion || 'room');
+    }
+    Mukdek.closeRoomNameModal();
+    window.location.href = `/?room=${encodeURIComponent(roomId)}`;
 };

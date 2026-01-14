@@ -33,6 +33,25 @@ if (M.dom.roomInput) {
         }
     });
 }
+if (M.dom.roomNameConfirm) {
+    M.dom.roomNameConfirm.addEventListener('click', () => M.confirmRoomName());
+}
+if (M.dom.roomNameCancel) {
+    M.dom.roomNameCancel.addEventListener('click', () => M.closeRoomNameModal());
+}
+if (M.dom.roomNameModal) {
+    M.dom.roomNameModal.addEventListener('click', (event) => {
+        if (event.target === M.dom.roomNameModal) M.closeRoomNameModal();
+    });
+}
+if (M.dom.roomNameInput) {
+    M.dom.roomNameInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            M.confirmRoomName();
+        }
+    });
+}
 
 const claimHostBtn = document.getElementById('claim-host-btn');
 if (claimHostBtn) claimHostBtn.addEventListener('click', () => M.claimHostManual());
@@ -111,6 +130,9 @@ document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (M.uiState.statsOpen) M.setStatsOpen(false);
     if (M.uiState.mainMenuOpen) M.setMainMenuOpen(false);
+    if (M.dom.roomNameModal && M.dom.roomNameModal.classList.contains('active')) {
+        M.closeRoomNameModal();
+    }
     if (M.dom.shortcutTargetModal && M.dom.shortcutTargetModal.classList.contains('active')) {
         M.hideShortcutTargetModal();
     }

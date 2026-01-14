@@ -76,6 +76,18 @@
         </div>
     </div>
 
+    <div id="room-name-modal" class="room-name-modal" aria-hidden="true">
+        <div class="room-name-card" role="dialog" aria-modal="true" aria-labelledby="room-name-title">
+            <h2 id="room-name-title">Name Your Room</h2>
+            <p class="room-name-subtitle">Pick a short, memorable name to share.</p>
+            <input id="room-name-input" type="text" maxlength="32" placeholder="room-name" autocapitalize="none" autocomplete="off" spellcheck="false">
+            <div class="room-name-actions">
+                <button id="room-name-confirm" class="modal-btn btn-yes" type="button">CREATE</button>
+                <button id="room-name-cancel" class="modal-btn btn-no" type="button">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
     <div id="game-header">
         <span class="header-spacer" aria-hidden="true"></span>
         <span id="identity-text">MUKDEK</span>
