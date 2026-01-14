@@ -8,13 +8,22 @@ const GameManager = require('./managers/GameManager');
 const app = express();
 const server = http.createServer(app);
 
+function normalizeOrigin(value) {
+    if (!value) return null;
+    try {
+        return new URL(String(value).trim()).origin;
+    } catch (err) {
+        return null;
+    }
+}
+
 const allowedOrigins = new Set(
     [
         process.env.PUBLIC_ORIGIN,
         process.env.RENDER_EXTERNAL_URL,
         ...(process.env.ALLOWED_ORIGINS || '').split(',')
     ]
-        .map((origin) => (origin || '').trim())
+        .map(normalizeOrigin)
         .filter(Boolean)
 );
 
@@ -64,11 +73,32 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const DATA_DIR = path.join(__dirname, '..', 'server', 'data');
 const gameManager = new GameManager(io, DATA_DIR);
+const restartToken = process.env.RESTART_TOKEN;
+
+const isLocalRequest = (req) => {
+    const raw = String(req.ip || '').toLowerCase();
+    return raw === '::1' || raw === '127.0.0.1' || raw.endsWith('::ffff:127.0.0.1');
+};
+
+const isRestartAllowed = (req) => {
+    if (isLocalRequest(req)) return true;
+    if (!restartToken) return false;
+    const token = String(req.query.token || req.headers['x-restart-token'] || '');
+    return token && token === restartToken;
+};
 
 app.get('/restart', (req, res) => {
+    if (!isRestartAllowed(req)) {
+        res.status(403).send('Forbidden');
+        return;
+    }
     const roomId = req.query.room || 'lobby';
     gameManager.restartRoom(roomId);
     res.redirect(`/?room=${encodeURIComponent(roomId)}`);
+});
+
+app.get('/rooms', (req, res) => {
+    res.json({ rooms: gameManager.getRoomsSummary() });
 });
 
 io.on('connection', (socket) => {

@@ -90,7 +90,14 @@ Mukdek.dom = {
     lightningPop: document.getElementById('lightning-pop'),
     statsOverlay: document.getElementById('stats-overlay'),
     statsBody: document.getElementById('stats-body'),
-    statsCloseBtn: document.getElementById('stats-close-btn')
+    statsCloseBtn: document.getElementById('stats-close-btn'),
+    roomInput: document.getElementById('room-input'),
+    roomJoinBtn: document.getElementById('room-join-btn'),
+    roomCreateBtn: document.getElementById('room-create-btn'),
+    roomCopyBtn: document.getElementById('room-copy-btn'),
+    roomRefreshBtn: document.getElementById('room-refresh-btn'),
+    roomListBody: document.getElementById('room-list-body'),
+    roomRefreshHint: document.getElementById('room-refresh-hint')
 };
 
 Mukdek.pendingShortcutMarbleId = null;
@@ -112,3 +119,98 @@ Mukdek.colorPalette = [
 ];
 
 Mukdek.gameColors = {};
+
+Mukdek.cleanRoomId = function cleanRoomId(value) {
+    if (!value) return '';
+    const cleaned = String(value).trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+    return cleaned;
+};
+
+Mukdek.joinRoomFromInput = function joinRoomFromInput() {
+    const raw = Mukdek.dom.roomInput ? Mukdek.dom.roomInput.value : '';
+    const cleaned = Mukdek.cleanRoomId(raw);
+    if (!cleaned) return;
+    window.location.href = `/?room=${encodeURIComponent(cleaned)}`;
+};
+
+Mukdek.createRoom = function createRoom() {
+    const suggestion = `${Math.random().toString(36).slice(2, 6)}${Date.now().toString(36).slice(-2)}`;
+    const input = window.prompt('Name your room:', suggestion);
+    if (input === null) return;
+    let roomId = Mukdek.cleanRoomId(input);
+    if (!roomId) {
+        roomId = Mukdek.cleanRoomId(suggestion);
+    }
+    window.location.href = `/?room=${encodeURIComponent(roomId)}`;
+};
+
+Mukdek.copyRoomLink = function copyRoomLink() {
+    const roomId = Mukdek.roomId || 'lobby';
+    const link = `${window.location.origin}/?room=${encodeURIComponent(roomId)}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).catch(() => {
+            window.prompt('Copy room link:', link);
+        });
+    } else {
+        window.prompt('Copy room link:', link);
+    }
+};
+
+Mukdek.renderRoomList = function renderRoomList(rooms) {
+    if (!Mukdek.dom.roomListBody) return;
+    if (!rooms || rooms.length === 0) {
+        Mukdek.dom.roomListBody.textContent = 'No active rooms yet.';
+        return;
+    }
+    Mukdek.dom.roomListBody.innerHTML = '';
+    rooms.forEach((room) => {
+        const item = document.createElement('div');
+        item.className = 'room-list-item';
+
+        const label = document.createElement('span');
+        const status = room.hasGame ? 'in-game' : 'lobby';
+        label.textContent = `${room.roomId} • ${room.seatedCount} players • ${status}`;
+
+        const joinBtn = document.createElement('button');
+        joinBtn.textContent = 'JOIN';
+        joinBtn.addEventListener('click', () => {
+            window.location.href = `/?room=${encodeURIComponent(room.roomId)}`;
+        });
+
+        item.appendChild(label);
+        item.appendChild(joinBtn);
+        Mukdek.dom.roomListBody.appendChild(item);
+    });
+};
+
+Mukdek.refreshRooms = function refreshRooms() {
+    if (!Mukdek.dom.roomListBody) return;
+    Mukdek.dom.roomListBody.textContent = 'Loading...';
+    fetch('/rooms')
+        .then((res) => res.json())
+        .then((data) => {
+            Mukdek.renderRoomList(Array.isArray(data.rooms) ? data.rooms : []);
+            Mukdek.updateRoomRefreshHint();
+        })
+        .catch(() => {
+            Mukdek.dom.roomListBody.textContent = 'Unable to load rooms.';
+            Mukdek.updateRoomRefreshHint(true);
+        });
+};
+
+if (Mukdek.dom.roomInput) {
+    Mukdek.dom.roomInput.value = Mukdek.roomId;
+}
+
+Mukdek.updateRoomRefreshHint = function updateRoomRefreshHint(isError = false) {
+    if (!Mukdek.dom.roomRefreshHint) return;
+    if (isError) {
+        Mukdek.dom.roomRefreshHint.textContent = 'Update failed. Retrying soon...';
+        return;
+    }
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    Mukdek.dom.roomRefreshHint.textContent = `Updated at ${hh}:${mm}:${ss}`;
+};

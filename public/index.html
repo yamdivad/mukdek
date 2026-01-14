@@ -16,6 +16,21 @@
             
             <div class="lobby-section ls-header">
                 <h1>Mukdek: Digital Edition</h1>
+                <div class="room-controls">
+                    <label for="room-input" class="room-label">Room</label>
+                    <input id="room-input" type="text" placeholder="room-id" maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false">
+                    <button id="room-join-btn" type="button">GO</button>
+                    <button id="room-create-btn" type="button">NEW</button>
+                    <button id="room-copy-btn" type="button">COPY LINK</button>
+                </div>
+                <div class="room-list">
+                    <div class="room-list-header">
+                        <span>Active Rooms</span>
+                        <button id="room-refresh-btn" type="button">REFRESH</button>
+                    </div>
+                    <div id="room-refresh-hint">Updated just now</div>
+                    <div id="room-list-body">Loading...</div>
+                </div>
             </div>
 
             <div class="lobby-section ls-identity">

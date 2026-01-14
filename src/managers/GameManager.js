@@ -5,6 +5,8 @@ const gameLogic = require(path.join(__dirname, '..', '..', 'public', 'js', 'game
 
 const RATE_LIMIT_MS = 200;
 const SIMILARITY_THRESHOLD = 10;
+const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60);
+const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
 
 const BOT_PREFERRED_COLORS = {
     1: '#e74c3c',
@@ -90,6 +92,7 @@ class GameRoom {
         this.gameDestructionTimeout = null;
         this.gameMode = '4p';
         this.lightningMode = false;
+        this.lastActive = Date.now();
 
         this.persistTimeout = null;
         this.persistInFlight = false;
@@ -98,6 +101,10 @@ class GameRoom {
         this.botAgent = new BotAgent(this, gameLogic);
 
         this.loadPersistedState();
+    }
+
+    markActive() {
+        this.lastActive = Date.now();
     }
 
     getStateFiles() {
@@ -190,21 +197,25 @@ class GameRoom {
 
     emitLobbyUpdate() {
         this.io.to(this.roomId).emit('lobbyUpdate', this.getLobbyState());
+        this.markActive();
         this.schedulePersist();
     }
 
     emitGameModeUpdate() {
         this.io.to(this.roomId).emit('gameModeUpdate', this.gameMode);
+        this.markActive();
         this.schedulePersist();
     }
 
     emitLightningStatus() {
         this.io.to(this.roomId).emit('lightningStatus', this.lightningMode);
+        this.markActive();
         this.schedulePersist();
     }
 
     broadcastGameState() {
         this.io.to(this.roomId).emit('gameState', this.gameState);
+        this.markActive();
         this.schedulePersist();
         this.botAgent.scheduleNextAction();
     }
@@ -221,6 +232,7 @@ class GameRoom {
     addSocket(socket) {
         socket.join(this.roomId);
         this.connectedSockets.add(socket.id);
+        this.markActive();
 
         if (this.gameDestructionTimeout) {
             clearTimeout(this.gameDestructionTimeout);
@@ -260,6 +272,7 @@ class GameRoom {
 
     onRegister(socket, sessionId) {
         if (typeof sessionId !== 'string') return;
+        this.markActive();
 
         let returningPlayerEntry = Object.entries(this.players).find(([k, v]) => v && v.session === sessionId && !v.isBot);
         if (returningPlayerEntry) {
@@ -287,6 +300,7 @@ class GameRoom {
         if (this.gameState) return;
         if (typeof sessionId !== 'string') return;
         if (Object.values(this.players).some(p => p && p.session === sessionId)) return;
+        this.markActive();
 
         for (let i = 1; i <= 6; i++) {
             if (this.players[i] === null) {
@@ -312,6 +326,7 @@ class GameRoom {
     onSetGameMode(socket, mode) {
         if (socket.id !== this.hostSocketId) return;
         if (this.gameState) return;
+        this.markActive();
 
         if (['2p', '4p', '6p'].includes(mode)) {
             this.gameMode = mode;
@@ -322,6 +337,7 @@ class GameRoom {
     onAddBot(socket, seatIndex) {
         if (this.gameState) return;
         if (socket.id !== this.hostSocketId) return;
+        this.markActive();
 
         if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 5) return;
 
@@ -345,6 +361,7 @@ class GameRoom {
         if (this.gameState) return;
         if (socket.id !== this.hostSocketId) return;
         if (typeof seatIndex !== 'number' || seatIndex < 0 || seatIndex > 5) return;
+        this.markActive();
 
         let pid = seatIndex + 1;
         if (this.players[pid] && this.players[pid].isBot) {
@@ -357,6 +374,7 @@ class GameRoom {
         if (this.gameState) return;
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
+        this.markActive();
         let pid = pEntry[0];
         let pData = this.players[pid];
 
@@ -375,6 +393,7 @@ class GameRoom {
         if (this.gameState) return;
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
+        this.markActive();
         let pid = pEntry[0];
         let pData = this.players[pid];
 
@@ -395,6 +414,7 @@ class GameRoom {
         if (this.gameState) return;
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
+        this.markActive();
 
         let pid = pEntry[0];
         if (this.players[pid].isBot) return;
@@ -408,6 +428,7 @@ class GameRoom {
         if (socket.id !== this.hostSocketId) return;
         if (targetPid === 1) return;
         if (typeof targetPid !== 'number' || targetPid < 1 || targetPid > 6) return;
+        this.markActive();
 
         if (this.players[targetPid]) {
             let isBot = this.players[targetPid].isBot;
@@ -432,6 +453,7 @@ class GameRoom {
 
     onRequestStartGame(socket) {
         if (socket.id !== this.hostSocketId) return;
+        this.markActive();
 
         let seatedPlayers = Object.entries(this.players).filter(([k, v]) => v !== null);
         let activeCount = seatedPlayers.length;
@@ -473,6 +495,7 @@ class GameRoom {
         if (!this.gameState) return;
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (!pEntry) return;
+        this.markActive();
 
         console.log(`Game reset requested in room ${this.roomId}.`);
         this.gameState = null;
@@ -498,6 +521,7 @@ class GameRoom {
 
     onToggleLightning(socket) {
         if (!this.gameState) return;
+        this.markActive();
 
         this.lightningMode = !this.lightningMode;
         this.emitLightningStatus();
@@ -509,6 +533,7 @@ class GameRoom {
         let pData = this.players[this.gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
         if (pData.isBot) return;
+        this.markActive();
 
         if (this.isRateLimited(pData)) return;
         this.performRollDice(this.gameState.activePlayer);
@@ -519,6 +544,7 @@ class GameRoom {
         let pData = this.players[this.gameState.activePlayer];
         if (!pData || pData.id !== socket.id) return;
         if (pData.isBot) return;
+        this.markActive();
 
         if (this.isRateLimited(pData)) return;
         if (typeof data.marbleId !== 'number') return;
@@ -532,11 +558,13 @@ class GameRoom {
 
     onDisconnect(socket) {
         this.connectedSockets.delete(socket.id);
+        this.markActive();
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (pEntry) {
             let pid = pEntry[0];
             if (!this.gameState && !this.players[pid].isBot) {
-                this.players[pid] = null;
+                this.players[pid].id = null;
+                this.players[pid].ready = false;
             }
         }
 
@@ -746,6 +774,10 @@ class GameManager {
         this.io = io;
         this.dataDir = dataDir;
         this.rooms = new Map();
+        this.cleanupInterval = setInterval(
+            () => this.cleanupRooms(),
+            ROOM_CLEANUP_INTERVAL_MS
+        );
     }
 
     sanitizeRoomId(roomId) {
@@ -767,11 +799,36 @@ class GameManager {
 
     restartRoom(roomId) {
         const safeId = this.sanitizeRoomId(roomId);
-        const fileBase = `room-${safeId}`;
+        this.rooms.delete(safeId);
+        this.deletePersistedRoom(safeId);
+    }
+
+    getRoomsSummary() {
+        return Array.from(this.rooms.entries()).map(([roomId, room]) => {
+            const lobby = room.getLobbyState();
+            return {
+                roomId,
+                seatedCount: lobby.seatedCount,
+                hasGame: !!room.gameState,
+                gameMode: room.gameMode
+            };
+        });
+    }
+
+    cleanupRooms() {
+        const now = Date.now();
+        for (const [roomId, room] of this.rooms.entries()) {
+            if (room.connectedSockets.size > 0) continue;
+            if (now - room.lastActive < ROOM_IDLE_TTL_MS) continue;
+            this.rooms.delete(roomId);
+            this.deletePersistedRoom(roomId);
+        }
+    }
+
+    deletePersistedRoom(roomId) {
+        const fileBase = `room-${roomId}`;
         const stateFile = path.join(this.dataDir, `${fileBase}.json`);
         const tmpFile = path.join(this.dataDir, `${fileBase}.json.tmp`);
-
-        this.rooms.delete(safeId);
 
         try { fs.unlinkSync(stateFile); } catch (err) {
             if (err.code !== 'ENOENT') console.error(err);

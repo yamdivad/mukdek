@@ -13,6 +13,27 @@ if (M.socket) {
 const joinBtn = document.getElementById('join-btn');
 if (joinBtn) joinBtn.addEventListener('click', () => M.joinGame());
 
+if (M.dom.roomJoinBtn) {
+    M.dom.roomJoinBtn.addEventListener('click', () => M.joinRoomFromInput());
+}
+if (M.dom.roomCreateBtn) {
+    M.dom.roomCreateBtn.addEventListener('click', () => M.createRoom());
+}
+if (M.dom.roomCopyBtn) {
+    M.dom.roomCopyBtn.addEventListener('click', () => M.copyRoomLink());
+}
+if (M.dom.roomRefreshBtn) {
+    M.dom.roomRefreshBtn.addEventListener('click', () => M.refreshRooms());
+}
+if (M.dom.roomInput) {
+    M.dom.roomInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            M.joinRoomFromInput();
+        }
+    });
+}
+
 const claimHostBtn = document.getElementById('claim-host-btn');
 if (claimHostBtn) claimHostBtn.addEventListener('click', () => M.claimHostManual());
 
@@ -96,5 +117,14 @@ document.addEventListener('keydown', (event) => {
 });
 
 M.initLobbyUI();
+M.refreshRooms();
+if (M.dom.roomListBody) {
+    M.roomRefreshInterval = setInterval(() => {
+        if (!document.hidden) M.refreshRooms();
+    }, 15000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) M.refreshRooms();
+    });
+}
 M.initBoard('4p'); // Default render 4p map in background
 })();
