@@ -169,11 +169,43 @@ Mukdek.copyRoomLink = function copyRoomLink() {
     const link = `${window.location.origin}/?room=${encodeURIComponent(roomId)}`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(link).catch(() => {
-            window.prompt('Copy room link:', link);
+            Mukdek.copyToClipboardFallback(link);
         });
     } else {
-        window.prompt('Copy room link:', link);
+        Mukdek.copyToClipboardFallback(link);
     }
+};
+
+Mukdek.copyToClipboardFallback = function copyToClipboardFallback(text) {
+    let copied = false;
+    try {
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        temp.setAttribute('readonly', 'true');
+        temp.style.position = 'fixed';
+        temp.style.top = '-9999px';
+        temp.style.left = '-9999px';
+        document.body.appendChild(temp);
+        temp.focus();
+        temp.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(temp);
+    } catch (err) {
+        copied = false;
+    }
+
+    if (copied) {
+        Mukdek.openNoticeModal({
+            title: 'Link Copied',
+            message: 'Room link copied to clipboard.'
+        });
+        return;
+    }
+
+    Mukdek.openNoticeModal({
+        title: 'Copy Room Link',
+        message: `Copy this link:\n${text}`
+    });
 };
 
 Mukdek.renderRoomList = function renderRoomList(rooms) {

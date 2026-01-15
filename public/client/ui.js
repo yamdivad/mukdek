@@ -33,6 +33,7 @@ M.setStatsOpen = function setStatsOpen(isOpen) {
     M.uiState.statsOpen = next;
     M.dom.statsOverlay.classList.toggle('is-open', next);
     M.dom.statsOverlay.setAttribute('aria-hidden', String(!next));
+    document.body.classList.toggle('modal-open', next);
     if (next && M.dom.statsCloseBtn) {
         M.dom.statsCloseBtn.focus();
     }

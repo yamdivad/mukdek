@@ -428,7 +428,17 @@ M.renderState = function renderState(state) {
         M.dom.rollBtn.disabled = false;
         M.dom.rollBtn.className = 'btn-base game-over';
         M.dom.rollBtn.onclick = () => {
-            if(confirm("Start a new game with the same players?")) {
+            if (typeof M.openConfirmModal === 'function') {
+                M.openConfirmModal({
+                    title: 'New Game',
+                    message: 'Start a new game with the same players?',
+                    confirmText: 'START',
+                    cancelText: 'CANCEL',
+                    onConfirm: () => {
+                        M.socket.emit('resetGame');
+                    }
+                });
+            } else {
                 M.socket.emit('resetGame');
             }
         };
