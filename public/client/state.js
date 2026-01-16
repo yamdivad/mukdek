@@ -21,22 +21,33 @@ Mukdek.lastLeaderId = null;
 
 Mukdek.lastActivePlayer = null;
 Mukdek.turnAudio = document.getElementById('turn-audio');
+Mukdek.constipationAudio = document.getElementById('constipation-audio');
 Mukdek.turnSoundTimeout = null;
 Mukdek.isLightningMode = false;
 Mukdek.celebratedPlayers = new Set();
+Mukdek.constipationPlayedBy = new Set();
 Mukdek.isFirstRender = true;
 Mukdek.currentGameMode = '4p';
 Mukdek.uiState = { statsOpen: false, mainMenuOpen: false };
+Mukdek.introState = { active: false, completed: false };
 
 Mukdek.faviconLink = document.getElementById("dynamic-favicon");
 Mukdek.originalFavicon = "favicon.svg";
 Mukdek.goFavicon = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22><rect width=%22512%22 height=%22512%22 rx=%22100%22 fill=%22%232ecc71%22/><text x=%2250%25%22 y=%2255%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-weight=%22900%22 font-size=%22300%22 fill=%22white%22>GO</text></svg>";
 
 document.body.addEventListener('click', () => {
-    Mukdek.turnAudio.play().then(() => {
-        Mukdek.turnAudio.pause();
-        Mukdek.turnAudio.currentTime = 0;
-    }).catch(() => {});
+    if (Mukdek.turnAudio) {
+        Mukdek.turnAudio.play().then(() => {
+            Mukdek.turnAudio.pause();
+            Mukdek.turnAudio.currentTime = 0;
+        }).catch(() => {});
+    }
+    if (Mukdek.constipationAudio) {
+        Mukdek.constipationAudio.play().then(() => {
+            Mukdek.constipationAudio.pause();
+            Mukdek.constipationAudio.currentTime = 0;
+        }).catch(() => {});
+    }
 }, { once: true });
 
 function getSessionId() {
@@ -71,6 +82,10 @@ if (Mukdek.socket) {
 }
 
 Mukdek.dom = {
+    introOverlay: document.getElementById('intro-overlay'),
+    introVideo: document.getElementById('intro-video'),
+    introSkip: document.getElementById('intro-skip'),
+    introPrompt: document.getElementById('intro-prompt'),
     board: document.getElementById('board'),
     container: document.getElementById('board-container'),
     rollBtn: document.getElementById('roll-btn'),
@@ -127,6 +142,97 @@ Mukdek.dom = {
     emojiStream: document.getElementById('emoji-stream'),
     emojiSlotBoard: document.getElementById('emoji-slot-board'),
     emojiSlotSidebar: document.getElementById('emoji-slot-sidebar')
+};
+
+Mukdek.getIntroSource = function getIntroSource() {
+    const portrait = window.matchMedia && window.matchMedia('(orientation: portrait)').matches;
+    return portrait ? 'assets/Mukdek-9-16-Intro-WEB.mp4' : 'assets/Mukdek-16-9-Intro-WEB.mp4';
+};
+
+Mukdek.finishIntro = function finishIntro() {
+    if (!Mukdek.dom.introOverlay || !Mukdek.dom.introVideo) return;
+    Mukdek.introState.completed = true;
+    Mukdek.introState.active = false;
+    Mukdek.dom.introOverlay.classList.remove('is-active', 'needs-interaction');
+    Mukdek.dom.introOverlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('intro-active');
+    Mukdek.dom.introVideo.pause();
+    Mukdek.dom.introVideo.currentTime = 0;
+};
+
+Mukdek.initIntro = function initIntro() {
+    if (!Mukdek.dom.introOverlay || !Mukdek.dom.introVideo) return;
+    if (Mukdek.introState.completed) return;
+
+    const src = Mukdek.getIntroSource();
+    if (Mukdek.dom.introVideo.getAttribute('src') !== src) {
+        Mukdek.dom.introVideo.setAttribute('src', src);
+    }
+
+    Mukdek.dom.introOverlay.classList.add('is-active');
+    Mukdek.dom.introOverlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('intro-active');
+    Mukdek.introState.active = true;
+
+    const tryPlay = () => {
+        Mukdek.dom.introVideo.play().catch(() => {
+            Mukdek.dom.introOverlay.classList.add('needs-interaction');
+        });
+    };
+
+    if (Mukdek.dom.introSkip) {
+        Mukdek.dom.introSkip.addEventListener('click', (event) => {
+            event.stopPropagation();
+            Mukdek.finishIntro();
+        }, { once: true });
+    }
+    Mukdek.dom.introVideo.addEventListener('ended', Mukdek.finishIntro, { once: true });
+    Mukdek.dom.introOverlay.addEventListener('click', () => {
+        if (!Mukdek.introState.active) return;
+        Mukdek.dom.introOverlay.classList.remove('needs-interaction');
+        tryPlay();
+    });
+
+    tryPlay();
+};
+
+Mukdek.initIntro();
+
+Mukdek.isHomeStaggered = function isHomeStaggered(state, playerId) {
+    if (!state || !state.marbles || !gameLogic || !gameLogic.MAPS) return false;
+    const mapData = gameLogic.MAPS[state.mode];
+    if (!mapData || !mapData.processedPlayers || !mapData.processedPlayers[playerId - 1]) return false;
+
+    const homeSpots = mapData.processedPlayers[playerId - 1].home;
+    const occupied = homeSpots.map((spot) => state.marbles.some((m) => m.player === playerId && gameLogic.samePos(m.pos, spot)));
+    if (occupied.filter(Boolean).length < 2) return false;
+
+    let sawMarble = false;
+    let sawGap = false;
+    for (let i = 0; i < occupied.length; i++) {
+        if (occupied[i]) {
+            if (sawGap) return true;
+            sawMarble = true;
+        } else if (sawMarble) {
+            sawGap = true;
+        }
+    }
+    return false;
+};
+
+Mukdek.maybePlayConstipation = function maybePlayConstipation(state) {
+    if (!state || state.phase !== 'play') return;
+    if (!Mukdek.constipationAudio) return;
+
+    const maxP = (state.mode === '2p') ? 2 : (state.mode === '6p' ? 6 : 4);
+    for (let pid = 1; pid <= maxP; pid++) {
+        if (Mukdek.constipationPlayedBy.has(pid)) continue;
+        if (!Mukdek.isHomeStaggered(state, pid)) continue;
+        Mukdek.constipationPlayedBy.add(pid);
+        Mukdek.constipationAudio.currentTime = 0;
+        Mukdek.constipationAudio.play().catch(() => {});
+        break;
+    }
 };
 
 Mukdek.pendingShortcutMarbleId = null;

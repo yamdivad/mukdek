@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const BotAgent = require('./BotAgent');
+const HardBotAgent = require('./HardBotAgent');
 const gameLogic = require(path.join(__dirname, '..', '..', 'public', 'js', 'gameLogic.js'));
 
 const RATE_LIMIT_MS = 200;
@@ -125,8 +126,26 @@ class GameRoom {
         this.emojiCooldowns = new Map();
 
         this.botAgent = new BotAgent(this, gameLogic);
+        this.hardBotAgent = new HardBotAgent(this, gameLogic);
 
         this.loadPersistedState();
+    }
+
+    getActiveBotAgent() {
+        if (this.gameState && this.gameState.mode === '6p' && this.totalPlayersAtStart >= 5) {
+            return this.hardBotAgent;
+        }
+        return this.botAgent;
+    }
+
+    clearBotTimers() {
+        this.botAgent.clearTimers();
+        this.hardBotAgent.clearTimers();
+    }
+
+    scheduleBotAction() {
+        this.clearBotTimers();
+        this.getActiveBotAgent().scheduleNextAction();
     }
 
     markActive() {
@@ -243,7 +262,7 @@ class GameRoom {
         this.io.to(this.roomId).emit('gameState', this.gameState);
         this.markActive();
         this.schedulePersist();
-        this.botAgent.scheduleNextAction();
+        this.scheduleBotAction();
     }
 
     async logGameResultsIfNeeded() {
@@ -711,7 +730,7 @@ class GameRoom {
         console.log(`Game reset requested in room ${this.roomId}.`);
         this.gameState = null;
         this.lightningMode = false;
-        this.botAgent.clearTimers();
+        this.clearBotTimers();
 
         let seatedCount = Object.values(this.players).filter(p => p !== null).length;
         if (seatedCount > 4) this.gameMode = '6p';
@@ -738,7 +757,7 @@ class GameRoom {
 
         this.lightningMode = !this.lightningMode;
         this.emitLightningStatus();
-        this.botAgent.scheduleNextAction();
+        this.scheduleBotAction();
     }
 
     onRollDice(socket) {
@@ -829,7 +848,7 @@ class GameRoom {
                 if (this.connectedSockets.size > 0) return;
                 this.gameState = null;
                 this.players = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
-                this.botAgent.clearTimers();
+                this.clearBotTimers();
                 this.schedulePersist();
             }, 60000);
         }

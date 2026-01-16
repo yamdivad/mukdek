@@ -10,7 +10,12 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
-    
+    <div id="intro-overlay" class="intro-overlay" aria-hidden="true">
+        <video id="intro-video" class="intro-video" playsinline preload="auto"></video>
+        <button id="intro-skip" class="intro-skip" type="button">SKIP INTRO</button>
+        <div id="intro-prompt" class="intro-prompt" aria-hidden="true">TAP TO PLAY</div>
+    </div>
+
     <div id="lobby-overlay">
         <div class="lobby-content">
             
@@ -207,6 +212,7 @@
     <div id="emoji-stream" aria-hidden="true"></div>
 
     <audio id="turn-audio" src="assets/player-turn.mp3" preload="auto"></audio>
+    <audio id="constipation-audio" src="assets/Constipation.mp3" preload="auto"></audio>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/gameLogic.js"></script>

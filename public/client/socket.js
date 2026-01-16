@@ -452,6 +452,9 @@ M.renderState = function renderState(state) {
     }
 
     M.checkForLeader(state.marbles);
+    if (typeof M.maybePlayConstipation === 'function') {
+        M.maybePlayConstipation(state);
+    }
 
     const isMyTurn = (state.activePlayer === M.myPlayerId);
     const isGameOver = state.phase === 'gameover';
@@ -567,6 +570,7 @@ M.socket.on('gameStart', (mode) => {
         M.dom.lobbyOverlay.style.display = 'none';
     }
     M.celebratedPlayers.clear();
+    if (M.constipationPlayedBy) M.constipationPlayedBy.clear();
     M.initBoard(mode);
 });
 
@@ -576,6 +580,7 @@ M.socket.on('gameReset', () => {
      M.dom.board.innerHTML = '';
      M.initBoard(M.currentGameMode);
      M.celebratedPlayers.clear();
+     if (M.constipationPlayedBy) M.constipationPlayedBy.clear();
 });
 
 M.socket.on('gameState', M.renderState);
