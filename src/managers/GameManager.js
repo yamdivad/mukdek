@@ -47,6 +47,10 @@ function hexToRgb(hex) {
     } : null;
 }
 
+function rollDie() {
+    return Math.floor(Math.random() * 6) + 1;
+}
+
 function getColorDistance(hex1, hex2) {
     const rgb1 = hexToRgb(hex1);
     const rgb2 = hexToRgb(hex2);
@@ -297,6 +301,122 @@ class GameRoom {
         return false;
     }
 
+    get6pRollOptions() {
+        if (!this.gameState || this.gameState.mode !== '6p') return [];
+        const dice = this.gameState.dice || { values: [], pending: [] };
+        const pending = Array.isArray(dice.pending) ? dice.pending : [];
+        const values = Array.isArray(dice.values) ? dice.values : [];
+        const options = pending.map((slot) => ({
+            type: 'die',
+            slot,
+            value: values[slot]
+        }));
+        if (pending.length === 2) {
+            const sum = (values[pending[0]] || 0) + (values[pending[1]] || 0);
+            options.push({ type: 'sum', value: sum });
+        }
+        return options;
+    }
+
+    computeMovesForRoll(rollValue, optionType) {
+        let movesMap = [];
+        let movable = [];
+        let playerMarbles = this.gameState.marbles.filter(m => m.player === this.gameState.activePlayer);
+
+        playerMarbles.forEach(m => {
+            let moves = gameLogic.computePossibleMoves(this.gameState.mode, this.gameState.marbles, m.id, rollValue);
+            if (optionType === 'sum' && rollValue === 6) {
+                moves = moves.filter(move => move.type !== 'spawn');
+            }
+            if (moves.length > 0) {
+                movable.push(m.id);
+                movesMap.push([m.id, moves]);
+            }
+        });
+
+        return { movesMap, movable };
+    }
+
+    setSelectedRoll(option) {
+        if (!option) {
+            this.gameState.selectedRoll = null;
+            this.gameState.currentRoll = 0;
+            this.gameState.movableMarbles = [];
+            this.gameState.possibleMoves = [];
+            return;
+        }
+        const { movesMap, movable } = this.computeMovesForRoll(option.value, option.type);
+        this.gameState.selectedRoll = option;
+        this.gameState.currentRoll = option.value;
+        this.gameState.movableMarbles = movable;
+        this.gameState.possibleMoves = movesMap;
+    }
+
+    evaluate6pRollOptions() {
+        const options = this.get6pRollOptions();
+        if (options.length === 0) {
+            this.setSelectedRoll(null);
+            return false;
+        }
+        for (const option of options) {
+            const { movesMap, movable } = this.computeMovesForRoll(option.value, option.type);
+            if (movable.length > 0) {
+                this.gameState.selectedRoll = option;
+                this.gameState.currentRoll = option.value;
+                this.gameState.movableMarbles = movable;
+                this.gameState.possibleMoves = movesMap;
+                return true;
+            }
+        }
+        this.setSelectedRoll(null);
+        return false;
+    }
+
+    handle6pNoMoves() {
+        const dice = this.gameState.dice || { values: [], pending: [] };
+        const values = Array.isArray(dice.values) ? dice.values : [];
+        let rerollSlots = values
+            .map((value, slot) => ({ value, slot }))
+            .filter(entry => entry.value === 1 || entry.value === 6)
+            .map(entry => entry.slot);
+
+        let attempts = 0;
+        while (rerollSlots.length > 0 && attempts < 10) {
+            rerollSlots.forEach(slot => {
+                dice.values[slot] = rollDie();
+            });
+            dice.pending = [0, 1];
+            dice.last = [...dice.values];
+            this.gameState.dice = dice;
+            if (this.evaluate6pRollOptions()) {
+                return true;
+            }
+            rerollSlots = dice.values
+                .map((value, slot) => ({ value, slot }))
+                .filter(entry => entry.value === 1 || entry.value === 6)
+                .map(entry => entry.slot);
+            attempts += 1;
+        }
+
+        this.setSelectedRoll(null);
+        return false;
+    }
+
+    updateRollStats(playerId, hasMoves) {
+        if (!this.gameState.stats) return;
+        const stats = this.gameState.stats;
+        if (!hasMoves) {
+            stats.noMoveRolls[playerId] = (stats.noMoveRolls[playerId] || 0) + 1;
+            stats.hotStreakCurrent[playerId] = 0;
+            return;
+        }
+        const nextStreak = (stats.hotStreakCurrent[playerId] || 0) + 1;
+        stats.hotStreakCurrent[playerId] = nextStreak;
+        if (nextStreak > (stats.hotStreakBest[playerId] || 0)) {
+            stats.hotStreakBest[playerId] = nextStreak;
+        }
+    }
+
     isEmojiRateLimited(socketId) {
         const now = Date.now();
         const last = this.emojiCooldowns.get(socketId) || 0;
@@ -355,6 +475,7 @@ class GameRoom {
         socket.on('resetGame', () => this.onResetGame(socket));
         socket.on('toggleLightning', () => this.onToggleLightning(socket));
         socket.on('rollDice', () => this.onRollDice(socket));
+        socket.on('selectRoll', (data) => this.onSelectRoll(socket, data));
         socket.on('makeMove', (data) => this.onMakeMove(socket, data));
         socket.on('emoji', (emoji) => this.onEmoji(socket, emoji));
         socket.on('disconnect', () => this.onDisconnect(socket));
@@ -631,6 +752,33 @@ class GameRoom {
         this.performRollDice(this.gameState.activePlayer);
     }
 
+    onSelectRoll(socket, data) {
+        if (!this.gameState || this.gameState.mode !== '6p') return;
+        let pData = this.players[this.gameState.activePlayer];
+        if (!pData || pData.id !== socket.id) return;
+        if (pData.isBot) return;
+        this.markActive();
+
+        const dice = this.gameState.dice || { values: [], pending: [] };
+        if (!data || typeof data.type !== 'string') return;
+
+        if (data.type === 'sum') {
+            if (!Array.isArray(dice.pending) || dice.pending.length !== 2) return;
+            const sum = (dice.values[dice.pending[0]] || 0) + (dice.values[dice.pending[1]] || 0);
+            this.setSelectedRoll({ type: 'sum', value: sum });
+        } else if (data.type === 'die') {
+            const slot = Number(data.slot);
+            if (!Number.isInteger(slot)) return;
+            if (!Array.isArray(dice.pending) || !dice.pending.includes(slot)) return;
+            const value = dice.values[slot];
+            this.setSelectedRoll({ type: 'die', slot, value });
+        } else {
+            return;
+        }
+
+        this.broadcastGameState();
+    }
+
     onMakeMove(socket, data) {
         if (!this.gameState) return;
         let pData = this.players[this.gameState.activePlayer];
@@ -693,10 +841,103 @@ class GameRoom {
         if (this.gameState.activePlayer !== playerId) return;
         if (this.gameState.finishedPlayers.includes(this.gameState.activePlayer)) return;
 
-        const roll = Math.floor(Math.random() * 6) + 1;
-        this.gameState.currentRoll = roll;
-
         const pName = this.gameState.playerNames[playerId] || `P${playerId}`;
+
+        if (this.gameState.mode === '6p') {
+            const diceState = this.gameState.dice || { values: [], pending: [] };
+
+            if (this.gameState.phase === 'init') {
+                const d1 = rollDie();
+                const d2 = rollDie();
+                const sum = d1 + d2;
+
+                this.gameState.dice = { values: [d1, d2], pending: [], last: [d1, d2] };
+                this.gameState.currentRoll = sum;
+
+                let pIndex = this.gameState.activePlayer - 1;
+                this.gameState.initRolls[pIndex] = sum;
+                this.gameState.message = `${pName} rolled ${d1} + ${d2} = ${sum}.`;
+
+                let maxP = (this.gameState.mode === '2p') ? 2 : (this.gameState.mode === '6p' ? 6 : 4);
+                let realPlayerIds = Object.keys(this.players).filter(k => this.players[k] !== null && k <= maxP).map(Number);
+                let allRolled = realPlayerIds.every(pid => this.gameState.initRolls[pid - 1] > 0);
+
+                if (allRolled) {
+                    let maxRoll = 0;
+                    realPlayerIds.forEach(pid => {
+                        if (this.gameState.initRolls[pid - 1] > maxRoll) maxRoll = this.gameState.initRolls[pid - 1];
+                    });
+                    let winners = [];
+                    realPlayerIds.forEach(pid => {
+                        if (this.gameState.initRolls[pid - 1] === maxRoll) winners.push(pid);
+                    });
+                    this.gameState.activePlayer = winners[0];
+                    const winnerName = this.gameState.playerNames[winners[0]] || `P${winners[0]}`;
+                    this.gameState.phase = 'play';
+                    this.gameState.message = `${winnerName} starts!`;
+                    this.gameState.currentRoll = 0;
+                } else {
+                    this.nextPlayer();
+                    const nextName = this.gameState.playerNames[this.gameState.activePlayer] || `P${this.gameState.activePlayer}`;
+                    this.gameState.message = `${nextName}, roll for order.`;
+                    this.gameState.currentRoll = 0;
+                }
+                this.broadcastGameState();
+                return;
+            }
+
+            if (Array.isArray(diceState.pending) && diceState.pending.length > 0) return;
+
+            const d1 = rollDie();
+            const d2 = rollDie();
+            this.gameState.dice = { values: [d1, d2], pending: [0, 1], last: [d1, d2] };
+            this.gameState.selectedRoll = null;
+
+            if (this.gameState.doubleStreak.playerId !== playerId || this.gameState.doubleStreak.value !== d1) {
+                this.gameState.doubleStreak = { playerId, value: d1, count: 0 };
+            }
+            if (d1 === d2) {
+                this.gameState.doubleStreak.count += 1;
+                if (this.gameState.doubleStreak.count >= 3) {
+                    if (!this.gameState.finishedPlayers.includes(playerId)) {
+                        this.gameState.finishedPlayers.unshift(playerId);
+                    }
+                    this.gameState.phase = 'gameover';
+                    this.gameState.message = `GAME OVER! ${pName} wins via Jorge's Rule!`;
+                    this.broadcastGameState();
+                    return;
+                }
+            } else {
+                this.gameState.doubleStreak = { playerId, value: null, count: 0 };
+            }
+
+            let hasMoves = this.evaluate6pRollOptions();
+            if (!hasMoves) {
+                const handled = this.handle6pNoMoves();
+                if (handled) hasMoves = true;
+            }
+
+            this.updateRollStats(playerId, hasMoves);
+
+            if (!hasMoves) {
+                const values = (this.gameState.dice && this.gameState.dice.values) || [d1, d2];
+                this.gameState.message = `Rolled ${values[0]} and ${values[1]}. No moves.`;
+                setTimeout(() => {
+                    if (!this.gameState) return;
+                    this.nextPlayer();
+                    this.broadcastGameState();
+                }, 1500);
+                return;
+            }
+
+            const values = (this.gameState.dice && this.gameState.dice.values) || [d1, d2];
+            this.gameState.message = `Rolled ${values[0]} and ${values[1]}! Move a marble.`;
+            this.broadcastGameState();
+            return;
+        }
+
+        const roll = rollDie();
+        this.gameState.currentRoll = roll;
 
         if (this.gameState.phase === 'init') {
             let pIndex = this.gameState.activePlayer - 1;
@@ -776,6 +1017,8 @@ class GameRoom {
 
     performMakeMove(playerId, marbleId, moveType, moveDestKey) {
         if (this.gameState.activePlayer !== playerId) return;
+        const isSixPlayer = this.gameState.mode === '6p';
+        if (isSixPlayer && !this.gameState.selectedRoll) return;
 
         let movesArray = this.gameState.possibleMoves.find(pm => pm[0] === marbleId);
         if (!movesArray) return;
@@ -848,13 +1091,133 @@ class GameRoom {
                     return;
                 }
             } else {
-                if (this.gameState.currentRoll === 6 || this.gameState.currentRoll === 1) {
-                    this.gameState.message = `Bonus roll! ${pName} goes again.`;
-                    this.gameState.currentRoll = 0;
-                    this.gameState.movableMarbles = [];
-                    this.gameState.possibleMoves = [];
+                if (isSixPlayer) {
+                    const dice = this.gameState.dice || { values: [], pending: [], last: [] };
+                    const selectedRoll = this.gameState.selectedRoll;
+                    const last = Array.isArray(dice.last) ? dice.last : dice.values;
+                    const currentValues = Array.isArray(dice.values) ? dice.values : [];
+
+                    let usedSlots = [];
+                    if (selectedRoll.type === 'sum') {
+                        usedSlots = [0, 1];
+                    } else if (selectedRoll.type === 'die') {
+                        usedSlots = [selectedRoll.slot];
+                    }
+
+                    const usedValues = usedSlots.map(slot => currentValues[slot]);
+                    dice.pending = (dice.pending || []).filter(slot => !usedSlots.includes(slot));
+
+                    const rerollSlots = usedSlots.filter((slot, idx) => {
+                        const value = usedValues[idx];
+                        return value === 1 || value === 6;
+                    });
+
+                    if (dice.pending.length === 0 && last[0] === last[1]) {
+                        const d1 = rollDie();
+                        const d2 = rollDie();
+                        this.gameState.dice = { values: [d1, d2], pending: [0, 1], last: [d1, d2] };
+                        this.gameState.selectedRoll = null;
+                        this.gameState.currentRoll = 0;
+
+                        if (this.gameState.doubleStreak.playerId !== playerId || this.gameState.doubleStreak.value !== d1) {
+                            this.gameState.doubleStreak = { playerId, value: d1, count: 0 };
+                        }
+                        if (d1 === d2) {
+                            this.gameState.doubleStreak.count += 1;
+                            if (this.gameState.doubleStreak.count >= 3) {
+                                if (!this.gameState.finishedPlayers.includes(playerId)) {
+                                    this.gameState.finishedPlayers.unshift(playerId);
+                                }
+                                this.gameState.phase = 'gameover';
+                                this.gameState.message = `GAME OVER! ${pName} wins via Jorge's Rule!`;
+                                this.broadcastGameState();
+                                return;
+                            }
+                        } else {
+                            this.gameState.doubleStreak = { playerId, value: null, count: 0 };
+                        }
+
+                        let hasMoves = this.evaluate6pRollOptions();
+                        if (!hasMoves) {
+                            const handled = this.handle6pNoMoves();
+                            if (handled) hasMoves = true;
+                        }
+
+                        this.updateRollStats(playerId, hasMoves);
+
+                        if (!hasMoves) {
+                            this.gameState.message = `Rolled ${d1} and ${d2}. No moves.`;
+                            setTimeout(() => {
+                                if (!this.gameState) return;
+                                this.nextPlayer();
+                                this.broadcastGameState();
+                            }, 1500);
+                            return;
+                        }
+
+                        this.gameState.message = `Bonus roll! ${pName} goes again.`;
+                    } else {
+                        rerollSlots.forEach(slot => {
+                            dice.values[slot] = rollDie();
+                            if (!dice.pending.includes(slot)) dice.pending.push(slot);
+                        });
+                        dice.pending.sort();
+                        dice.last = last;
+                        this.gameState.dice = dice;
+
+                        if (dice.pending.length > 0) {
+                            this.gameState.selectedRoll = null;
+                            this.gameState.currentRoll = 0;
+                            let hasMoves = this.evaluate6pRollOptions();
+                            this.updateRollStats(playerId, hasMoves);
+                            if (!hasMoves) {
+                                if (dice.pending.length === 1) {
+                                    const slot = dice.pending[0];
+                                    const value = dice.values[slot];
+                                    if (value === 1 || value === 6) {
+                                        dice.values[slot] = rollDie();
+                                        dice.pending = [slot];
+                                        dice.last = [...dice.values];
+                                        this.gameState.dice = dice;
+                                        this.gameState.selectedRoll = null;
+                                        this.gameState.currentRoll = 0;
+                                        const rerollHasMoves = this.evaluate6pRollOptions();
+                                        this.updateRollStats(playerId, rerollHasMoves);
+                                        if (!rerollHasMoves) {
+                                            this.gameState.message = `No moves.`;
+                                            setTimeout(() => {
+                                                if (!this.gameState) return;
+                                                this.nextPlayer();
+                                                this.broadcastGameState();
+                                            }, 1500);
+                                            return;
+                                        }
+                                        this.gameState.message = `Roll again, ${pName}.`;
+                                        return;
+                                    }
+                                }
+                                this.gameState.message = `No moves.`;
+                                setTimeout(() => {
+                                    if (!this.gameState) return;
+                                    this.nextPlayer();
+                                    this.broadcastGameState();
+                                }, 1500);
+                                return;
+                            }
+                            this.gameState.message = `Keep going, ${pName}.`;
+                        } else {
+                            this.nextPlayer();
+                        }
+                    }
                 } else {
-                    this.nextPlayer();
+                    if (this.gameState.currentRoll === 6 || this.gameState.currentRoll === 1) {
+                        this.gameState.message = `Bonus roll! ${pName} goes again.`;
+                        this.gameState.currentRoll = 0;
+                        this.gameState.movableMarbles = [];
+                        this.gameState.possibleMoves = [];
+                    } else {
+                        this.nextPlayer();
+                    }
                 }
             }
             this.broadcastGameState();
@@ -886,6 +1249,11 @@ class GameRoom {
         this.gameState.currentRoll = 0;
         this.gameState.movableMarbles = [];
         this.gameState.possibleMoves = [];
+        if (this.gameState.mode === '6p' && this.gameState.dice) {
+            this.gameState.dice.pending = [];
+            this.gameState.selectedRoll = null;
+            this.gameState.doubleStreak = { playerId: null, value: null, count: 0 };
+        }
         let nextName = (this.gameState.playerNames && this.gameState.playerNames[this.gameState.activePlayer]) || `P${this.gameState.activePlayer}`;
         this.gameState.message = `${nextName}'s turn.`;
     }

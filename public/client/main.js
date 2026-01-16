@@ -126,6 +126,22 @@ if (M.dom.menuRestart) {
     });
 }
 
+const diceEl = document.getElementById('dice');
+if (diceEl) {
+    diceEl.addEventListener('click', (event) => {
+        if (!M.socket) return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.classList.contains('die-btn')) {
+            if (target.classList.contains('is-used')) return;
+            const slot = target.getAttribute('data-slot');
+            if (slot !== null) M.socket.emit('selectRoll', { type: 'die', slot: Number(slot) });
+        } else if (target.classList.contains('sum-btn')) {
+            M.socket.emit('selectRoll', { type: 'sum' });
+        }
+    });
+}
+
 
 if (M.dom.statsOverlay) {
     M.dom.statsOverlay.addEventListener('click', (event) => {

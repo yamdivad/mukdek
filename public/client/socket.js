@@ -359,7 +359,43 @@ M.renderState = function renderState(state) {
 
     document.getElementById('message').textContent = state.message;
     const diceChars = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
-    document.getElementById('dice').textContent = state.currentRoll > 0 ? diceChars[state.currentRoll - 1] : '🎲';
+    const diceEl = document.getElementById('dice');
+    if (state.mode === '6p') {
+        const diceState = state.dice || { values: [], pending: [] };
+        const values = Array.isArray(diceState.values) ? diceState.values : [];
+        const pending = new Set(Array.isArray(diceState.pending) ? diceState.pending : []);
+        const selected = state.selectedRoll;
+        diceEl.innerHTML = '';
+
+        if (values.length === 2) {
+            values.forEach((value, slot) => {
+                const btn = document.createElement('button');
+                btn.className = 'die-btn';
+                btn.type = 'button';
+                btn.dataset.slot = slot;
+                btn.textContent = diceChars[value - 1] || '🎲';
+                if (!pending.has(slot)) btn.classList.add('is-used');
+                if (selected && selected.type === 'die' && selected.slot === slot) {
+                    btn.classList.add('is-selected');
+                }
+                diceEl.appendChild(btn);
+            });
+            if (pending.size === 2) {
+                const sumVal = (values[0] || 0) + (values[1] || 0);
+                const sumBtn = document.createElement('button');
+                sumBtn.className = 'sum-btn';
+                sumBtn.type = 'button';
+                sumBtn.dataset.type = 'sum';
+                sumBtn.textContent = `SUM ${sumVal}`;
+                if (selected && selected.type === 'sum') sumBtn.classList.add('is-selected');
+                diceEl.appendChild(sumBtn);
+            }
+        } else {
+            diceEl.textContent = '🎲';
+        }
+    } else {
+        diceEl.textContent = state.currentRoll > 0 ? diceChars[state.currentRoll - 1] : '🎲';
+    }
 
     let maxP = (M.currentGameMode === '2p') ? 2 : (M.currentGameMode === '6p' ? 6 : 4);
     let needed = (M.currentGameMode === '6p') ? 4 : 5;
@@ -420,6 +456,11 @@ M.renderState = function renderState(state) {
     const isMyTurn = (state.activePlayer === M.myPlayerId);
     const isGameOver = state.phase === 'gameover';
 
+    const hasPendingDice = state.mode === '6p'
+        && state.dice
+        && Array.isArray(state.dice.pending)
+        && state.dice.pending.length > 0;
+
     if (isGameOver) {
         M.dom.rollBtn.textContent = "GAME OVER / NEW GAME";
         M.dom.rollBtn.disabled = false;
@@ -441,7 +482,10 @@ M.renderState = function renderState(state) {
         };
         document.getElementById('dice').classList.remove('rolling');
     } else if (isMyTurn) {
-        if (state.currentRoll === 0 || state.phase === 'init') {
+        const canRoll = state.mode === '6p'
+            ? (!hasPendingDice || state.phase === 'init')
+            : (state.currentRoll === 0 || state.phase === 'init');
+        if (canRoll) {
             M.dom.rollBtn.textContent = state.phase === 'init' ? "ROLL FOR ORDER" : "ROLL DICE";
             M.dom.rollBtn.disabled = false;
             M.dom.rollBtn.className = 'btn-base my-turn';

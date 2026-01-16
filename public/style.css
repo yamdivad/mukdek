@@ -502,7 +502,36 @@ body.mode-6p:not(.lobby-open) #board-container {
 .player-status strong { display: block; font-size: 1.2em; }
 
 #controls { margin-bottom: 10px; width: 95%; min-height: 80px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 20px; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 15px; }
-#dice { font-size: 5em; cursor: pointer; color: #3e2723; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; display: flex; align-items: center; justify-content: center; }
+#dice { font-size: 5em; cursor: pointer; color: #3e2723; width: auto; height: auto; line-height: 1.2; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; }
+#dice .die-btn,
+#dice .sum-btn {
+    border: none;
+    border-radius: 14px;
+    padding: 4px 10px;
+    background: rgba(255,255,255,0.9);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    font-size: 0.7em;
+    line-height: 1;
+    cursor: pointer;
+}
+#dice .die-btn.is-used {
+    opacity: 0.35;
+    cursor: default;
+}
+#dice .die-btn.is-selected,
+#dice .sum-btn.is-selected {
+    background: #ffca28;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+#dice .sum-btn {
+    font-size: 0.4em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+body.mode-6p #dice {
+    font-size: 3.2em;
+}
 #dice.rolling { animation: roll 0.6s ease-in-out; }
 @keyframes roll { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
