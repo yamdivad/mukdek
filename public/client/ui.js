@@ -291,7 +291,7 @@ M.renderStats = function renderStats(stats, names) {
     }
 };
 
-M.allowedEmojiReactions = ['😡', '😱', '🫠', '🤣', '😳', '😎'];
+M.allowedEmojiReactions = ['😀', '🤣', '😎', '😡', '😱', '😳', '💩', '🫠', '☠️', '🎻'];
 
 M.sendEmojiReaction = function sendEmojiReaction(emoji) {
     if (!M.socket) return;

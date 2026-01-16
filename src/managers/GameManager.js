@@ -7,7 +7,7 @@ const RATE_LIMIT_MS = 200;
 const SIMILARITY_THRESHOLD = 10;
 const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
-const EMOJI_REACTIONS = new Set(['😡', '😱', '🫠', '🤣', '😳', '😎']);
+const EMOJI_REACTIONS = new Set(['😀', '🤣', '😎', '😡', '😱', '😳', '💩', '🫠', '☠️', '🎻']);
 
 const BOT_PREFERRED_COLORS = {
     1: '#e74c3c',

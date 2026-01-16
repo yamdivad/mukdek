@@ -515,6 +515,7 @@ M.renderState = function renderState(state) {
 M.socket.on('gameStart', (mode) => {
     M.currentGameMode = mode;
     document.body.classList.toggle('mode-6p', mode === '6p');
+    document.body.classList.remove('lobby-open');
     if (typeof M.syncBoardOrientation === 'function') {
         M.syncBoardOrientation();
     }
@@ -527,6 +528,7 @@ M.socket.on('gameStart', (mode) => {
 
 M.socket.on('gameReset', () => {
      M.dom.lobbyOverlay.style.display = 'flex';
+     document.body.classList.add('lobby-open');
      M.dom.board.innerHTML = '';
      M.initBoard(M.currentGameMode);
      M.celebratedPlayers.clear();

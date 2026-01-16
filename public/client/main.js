@@ -1,6 +1,8 @@
 (() => {
 const M = window.Mukdek;
 
+document.body.classList.add('lobby-open');
+
 if (M.socket) {
     M.dom.nameInput.addEventListener('input', (e) => {
         M.socket.emit('setName', e.target.value);
