@@ -72,6 +72,11 @@ M.socket.on('lightningStatus', (isOn) => {
     M.isFirstStatusLoad = false;
 });
 
+M.socket.on('emojiReaction', (data) => {
+    if (!data || typeof data.emoji !== 'string') return;
+    M.showEmojiReaction(data.emoji);
+});
+
 M.socket.on('lobbyUpdate', (state) => {
     if (M.dom.menuLightning) M.dom.menuLightning.disabled = true;
     if (M.dom.menuRestart) M.dom.menuRestart.disabled = true;
@@ -290,17 +295,9 @@ M.socket.on('murder', (data) => {
     let victimColor = M.gameColors[data.victimId] || '#b71c1c';
     splat.style.background = `radial-gradient(circle, ${victimColor} 40%, transparent 70%)`;
 
-    let mapData = gameLogic.MAPS[M.currentGameMode || '4p'];
-    let cols = mapData ? mapData.gridCols : 17;
-    let rows = mapData ? mapData.gridRows : 17;
-
-    let cellPctX = 100/cols;
-    let cellPctY = 100/rows;
-
-    let centerX = (data.pos.col * cellPctX) + (cellPctX/2);
-    let centerY = (data.pos.row * cellPctY) + (cellPctY/2);
-    splat.style.left = `calc(${centerX}% - 2.75%)`;
-    splat.style.top = `calc(${centerY}% - 2.75%)`;
+    let posStyle = M.getCenteredPos(data.pos.col, data.pos.row, '--splat-scale', '0.85');
+    splat.style.left = posStyle.left;
+    splat.style.top = posStyle.top;
     M.dom.container.appendChild(splat);
     setTimeout(() => { splat.remove(); }, 2000);
 });
@@ -504,22 +501,14 @@ M.renderState = function renderState(state) {
         let group = posGroups[m.pos.col + "_" + m.pos.row];
         let indexInGroup = group.findIndex(gm => gm.id === m.id);
 
-        let mapData = gameLogic.MAPS[M.currentGameMode || '4p'];
-        let cols = mapData ? mapData.gridCols : 17;
-        let rows = mapData ? mapData.gridRows : 17;
-
-        let cellPctX = 100/cols;
-        let cellPctY = 100/rows;
-
-        let centerX = (m.pos.col * cellPctX) + (cellPctX/2);
-        let centerY = (m.pos.row * cellPctY) + (cellPctY/2);
         let offX = 0, offY = 0;
         if (group.length > 1) {
              offX = (indexInGroup % 2 === 0 ? 1 : -1) * 0.8 * (Math.floor(indexInGroup/2) + 1);
              offY = (indexInGroup % 2 !== 0 ? 1 : -1) * 0.8 * (Math.floor(indexInGroup/2) + 1);
         }
-        el.style.left = `calc(${centerX + offX}% - 2.25%)`;
-        el.style.top = `calc(${centerY + offY}% - 2.25%)`;
+        let posStyle = M.getCenteredPos(m.pos.col, m.pos.row, '--piece-scale', '0.75', offX, offY);
+        el.style.left = posStyle.left;
+        el.style.top = posStyle.top;
     });
 };
 

@@ -143,6 +143,30 @@ if (M.dom.shortcutTargetCancel) {
     });
 }
 
+const emojiLayoutQuery = window.matchMedia('(min-aspect-ratio: 1.2/1)');
+const syncEmojiSlot = () => {
+    if (!M.dom.emojiBar) return;
+    const target = emojiLayoutQuery.matches ? M.dom.emojiSlotSidebar : M.dom.emojiSlotBoard;
+    if (!target || M.dom.emojiBar.parentElement === target) return;
+    target.appendChild(M.dom.emojiBar);
+};
+
+syncEmojiSlot();
+if (emojiLayoutQuery.addEventListener) {
+    emojiLayoutQuery.addEventListener('change', syncEmojiSlot);
+} else if (emojiLayoutQuery.addListener) {
+    emojiLayoutQuery.addListener(syncEmojiSlot);
+}
+
+if (M.dom.emojiBar) {
+    M.dom.emojiBar.querySelectorAll('.emoji-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const emoji = btn.getAttribute('data-emoji');
+            if (emoji) M.sendEmojiReaction(emoji);
+        });
+    });
+}
+
 document.addEventListener('click', (event) => {
     if (!M.dom.mainMenu || !M.dom.menuBtn) return;
     if (!M.uiState.mainMenuOpen) return;

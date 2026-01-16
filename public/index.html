@@ -155,6 +155,7 @@
                 <button id="roll-btn" class="btn-base" disabled>Wait for Game</button>
             </div>
             <div id="message" style="text-align:center; font-weight:bold; color:#5d4037; margin-top:5px; min-height:1.2em;">Waiting for start...</div>
+            <div id="emoji-slot-sidebar"></div>
 
             <div id="stats-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stats-title">
                 <div class="modal-content">
@@ -165,21 +166,36 @@
             </div>
         </div>
 
-        <div id="board-container">
-            <div id="board"></div>
-            <div id="shortcut-modal">
-                <h2>Shortcut Available!</h2>
-                <p style="color:white; margin-bottom:15px;">Do you want to take the center shortcut?</p>
-                <button class="modal-btn btn-yes" onclick="Mukdek.confirmShortcut(true)">YES!</button>
-                <button class="modal-btn btn-no" onclick="Mukdek.confirmShortcut(false)">NO</button>
+        <div id="board-stack">
+            <div id="board-container">
+                <div id="board"></div>
+                <div id="shortcut-modal">
+                    <h2>Shortcut Available!</h2>
+                    <p style="color:white; margin-bottom:15px;">Do you want to take the center shortcut?</p>
+                    <button class="modal-btn btn-yes" onclick="Mukdek.confirmShortcut(true)">YES!</button>
+                    <button class="modal-btn btn-no" onclick="Mukdek.confirmShortcut(false)">NO</button>
+                </div>
+                <div id="shortcut-target-modal">
+                    <h2>Choose a Target</h2>
+                    <div id="shortcut-target-options" class="shortcut-target-options"></div>
+                    <button id="shortcut-target-cancel" class="modal-btn btn-no">CANCEL</button>
+                </div>
             </div>
-            <div id="shortcut-target-modal">
-                <h2>Choose a Target</h2>
-                <div id="shortcut-target-options" class="shortcut-target-options"></div>
-                <button id="shortcut-target-cancel" class="modal-btn btn-no">CANCEL</button>
+
+            <div id="emoji-slot-board">
+                <div id="emoji-bar" aria-label="Emoji reactions">
+                    <button class="emoji-btn" data-emoji="😡" aria-label="Angry face">😡</button>
+                    <button class="emoji-btn" data-emoji="😱" aria-label="Screaming face">😱</button>
+                    <button class="emoji-btn" data-emoji="🫠" aria-label="Melting face">🫠</button>
+                    <button class="emoji-btn" data-emoji="🤣" aria-label="Rolling on the floor laughing">🤣</button>
+                    <button class="emoji-btn" data-emoji="😳" aria-label="Wide eyes face">😳</button>
+                    <button class="emoji-btn" data-emoji="😎" aria-label="Smiling face with sunglasses">😎</button>
+                </div>
             </div>
         </div>
     </div>
+
+    <div id="emoji-stream" aria-hidden="true"></div>
 
     <audio id="turn-audio" src="assets/player-turn.mp3" preload="auto"></audio>
 

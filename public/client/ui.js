@@ -225,6 +225,7 @@ M.renderStats = function renderStats(stats, names) {
     let maxDeaths = -1; let victim = null;
 
     let maxP = (M.currentGameMode === '2p') ? 2 : (M.currentGameMode === '6p' ? 6 : 4);
+    let isGameOver = M.currentGameState && M.currentGameState.phase === 'gameover';
 
     for(let i=1; i<=maxP; i++) {
         if(!names[i]) continue;
@@ -251,8 +252,84 @@ M.renderStats = function renderStats(stats, names) {
     if (maxKills > 0) html += `<div class="highlight-stat">Most Ruthless: ${killer} (${maxKills})</div>`;
     if (maxDeaths > 0) html += `<div class="highlight-stat">Most Targeted: ${victim} (${maxDeaths})</div>`;
 
+    if (isGameOver) {
+        if (stats.speedrunnerBest && stats.speedrunnerBest.rolls > 0) {
+            let sPid = stats.speedrunnerBest.playerId;
+            let sName = names[sPid] || `P${sPid}`;
+            html += `<div class="highlight-stat">Speedrunner: ${sName} (${stats.speedrunnerBest.rolls} rolls)</div>`;
+        }
+
+        let maxStreak = -1;
+        let maxUnlucky = -1;
+        let streakLeaders = [];
+        let unluckyLeaders = [];
+
+        for(let i=1; i<=maxP; i++) {
+            if(!names[i]) continue;
+            let streak = (stats.hotStreakBest && stats.hotStreakBest[i]) || 0;
+            let unlucky = (stats.noMoveRolls && stats.noMoveRolls[i]) || 0;
+
+            if (streak > maxStreak) { maxStreak = streak; streakLeaders = [i]; }
+            else if (streak === maxStreak && streak > 0) { streakLeaders.push(i); }
+
+            if (unlucky > maxUnlucky) { maxUnlucky = unlucky; unluckyLeaders = [i]; }
+            else if (unlucky === maxUnlucky && unlucky > 0) { unluckyLeaders.push(i); }
+        }
+
+        if (maxStreak > 0) {
+            let leaderNames = streakLeaders.map(id => names[id] || `P${id}`).join(', ');
+            html += `<div class="highlight-stat">Hot Streak: ${leaderNames} (${maxStreak})</div>`;
+        }
+        if (maxUnlucky > 0) {
+            let leaderNames = unluckyLeaders.map(id => names[id] || `P${id}`).join(', ');
+            html += `<div class="highlight-stat">Unlucky: ${leaderNames} (${maxUnlucky})</div>`;
+        }
+    }
+
     if (M.dom.statsBody) {
         M.dom.statsBody.innerHTML = html;
     }
+};
+
+M.allowedEmojiReactions = ['😡', '😱', '🫠', '🤣', '😳', '😎'];
+
+M.sendEmojiReaction = function sendEmojiReaction(emoji) {
+    if (!M.socket) return;
+    if (!M.allowedEmojiReactions.includes(emoji)) return;
+    if (!M.currentGameState || M.currentGameState.phase === 'init') return;
+    if (M.myPlayerId === null) return;
+    M.socket.emit('emoji', emoji);
+};
+
+M.showEmojiReaction = function showEmojiReaction(emoji) {
+    if (!M.dom.emojiStream) return;
+    if (!M.allowedEmojiReactions.includes(emoji)) return;
+
+    const boardRect = M.dom.container ? M.dom.container.getBoundingClientRect() : null;
+    const viewportWidth = window.innerWidth || 0;
+    const viewportHeight = window.innerHeight || 0;
+    const baseX = boardRect ? boardRect.left + boardRect.width * 0.5 : viewportWidth * 0.5;
+    const baseY = boardRect ? boardRect.bottom - 10 : viewportHeight * 0.8;
+    const jitter = (boardRect ? boardRect.width : viewportWidth) * 0.35;
+
+    let x = baseX + (Math.random() - 0.5) * jitter;
+    x = Math.max(16, Math.min(viewportWidth - 16, x));
+
+    const emojiEl = document.createElement('div');
+    emojiEl.className = 'emoji-float';
+    emojiEl.textContent = emoji;
+    emojiEl.style.left = `${x}px`;
+    emojiEl.style.top = `${baseY}px`;
+
+    const drift = (Math.random() - 0.5) * 90;
+    const rise = 140 + Math.random() * 80;
+    const duration = 1600 + Math.random() * 800;
+
+    emojiEl.style.setProperty('--emoji-drift', `${drift}px`);
+    emojiEl.style.setProperty('--emoji-rise', `${rise}px`);
+    emojiEl.style.setProperty('--emoji-duration', `${duration}ms`);
+
+    M.dom.emojiStream.appendChild(emojiEl);
+    emojiEl.addEventListener('animationend', () => emojiEl.remove());
 };
 })();

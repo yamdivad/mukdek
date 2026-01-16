@@ -122,7 +122,11 @@ Mukdek.dom = {
     noticeMessage: document.getElementById('notice-message'),
     noticeOk: document.getElementById('notice-ok'),
     roomsToggle: document.getElementById('rooms-toggle'),
-    roomsPanel: document.getElementById('rooms-panel')
+    roomsPanel: document.getElementById('rooms-panel'),
+    emojiBar: document.getElementById('emoji-bar'),
+    emojiStream: document.getElementById('emoji-stream'),
+    emojiSlotBoard: document.getElementById('emoji-slot-board'),
+    emojiSlotSidebar: document.getElementById('emoji-slot-sidebar')
 };
 
 Mukdek.pendingShortcutMarbleId = null;

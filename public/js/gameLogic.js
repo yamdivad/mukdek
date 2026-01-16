@@ -298,8 +298,25 @@
             }
         }
         
-        let statsObj = { murders: {}, deaths: {} };
-        for(let i=1; i<=playerCount; i++) { statsObj.murders[i] = 0; statsObj.deaths[i] = 0; }
+        let statsObj = {
+            murders: {},
+            deaths: {},
+            noMoveRolls: {},
+            hotStreakCurrent: {},
+            hotStreakBest: {},
+            marbleRolls: {},
+            finishedMarbles: {},
+            speedrunnerBest: null,
+            gameResultsLogged: false
+        };
+        for(let i=1; i<=playerCount; i++) {
+            statsObj.murders[i] = 0;
+            statsObj.deaths[i] = 0;
+            statsObj.noMoveRolls[i] = 0;
+            statsObj.hotStreakCurrent[i] = 0;
+            statsObj.hotStreakBest[i] = 0;
+        }
+        marbles.forEach(m => { statsObj.marbleRolls[m.id] = 0; });
 
         return {
             mode: mode,

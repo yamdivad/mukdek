@@ -3,6 +3,8 @@
     --sidebar-width: 100%;
     --tap-target: 44px;
     --tap-target-small: 36px;
+    --piece-scale: 0.75;
+    --splat-scale: 0.85;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -13,7 +15,7 @@ body {
     color: #3e2723; 
     min-height: 100vh; 
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start; 
-    touch-action: manipulation; overflow-y: auto; padding-bottom: 50px;
+    touch-action: manipulation; overflow-y: auto; overflow-x: hidden; padding-bottom: 50px;
 }
 
 body.mode-6p {
@@ -34,7 +36,7 @@ body.mode-6p #board-container {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
     background: rgba(62, 39, 35, 0.98); z-index: 2000; 
     display: flex; flex-direction: column; align-items: center; justify-content: center; 
-    overflow-y: auto; padding: 20px; pointer-events: none;
+    overflow-y: auto; overflow-x: hidden; padding: 20px; pointer-events: none;
 }
 
 .lobby-content {
@@ -411,6 +413,14 @@ body.mode-6p #board-container {
     width: 100%; max-width: 100%; flex-grow: 1;
 }
 
+#board-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
 #sidebar {
     display: flex; flex-direction: column; align-items: center;
     width: var(--sidebar-width); margin-bottom: 10px; transition: all 0.3s ease;
@@ -422,7 +432,8 @@ body.mode-6p #board-container {
     body { justify-content: center; padding-bottom: 0; overflow: hidden; }
     #game-area { flex-direction: row; justify-content: center; align-items: center; gap: 40px; height: calc(100vh - 60px); }
     #sidebar { width: 350px; order: 2; margin-bottom: 0; background: rgba(255,255,255,0.2); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-    #board-container { order: 1; margin: 0 !important; }
+    #board-stack { order: 1; width: auto; }
+    #board-container { margin: 0 !important; }
 }
 
 #menu-btn { font-size: 1.2em; cursor: pointer; text-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.2s; user-select: none; pointer-events: auto; }
@@ -484,17 +495,87 @@ body.mode-6p #board-container {
 .shortcut { background: #009688; border: 2px solid #004d40; }
 .work, .home { background: #8d6e63; border: 1px solid #5d4037; opacity: 0.8; }
 
-.marble { width: calc(100% / var(--grid-cols, 17) * 0.75); height: auto; aspect-ratio: 1 / 1; border-radius: 50%; position: absolute; z-index: 20; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.6); border: 2px solid rgba(255,255,255,0.8); transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s; }
+.marble { width: calc(100% / var(--grid-cols, 17) * var(--piece-scale, 0.75)); height: auto; aspect-ratio: 1 / 1; border-radius: 50%; position: absolute; z-index: 20; box-shadow: 0 3px 5px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.6); border: 2px solid rgba(255,255,255,0.8); transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1), transform 0.3s; }
 .marble::after { content: ''; position: absolute; top: -75%; left: -75%; width: 250%; height: 250%; border-radius: 50%; background: transparent; z-index: 21; }
 .marble[data-color="#ffffff"] { border: 2px solid #999; }
 .marble.movable { z-index: 100; cursor: pointer; filter: drop-shadow(0 0 5px gold); }
 .marble.movable::after {  border: 2px solid rgba(255,255,255,0.5); opacity: 0; animation: ringPulse 1.5s infinite; }
 @keyframes ringPulse { 0% { transform: scale(0.4); opacity: 1; } 100% { transform: scale(1.0); opacity: 0; } }
 
-.ghost-marble { width: calc(100% / var(--grid-cols, 17) * 0.75); height: auto; aspect-ratio: 1 / 1; border-radius: 50%; position: absolute; z-index: 15; opacity: 0.5; border: 2px dashed rgba(255,255,255,0.8); pointer-events: none; transition: all 0.2s; animation: ghostPulse 1s infinite alternate; }
+.ghost-marble { width: calc(100% / var(--grid-cols, 17) * var(--piece-scale, 0.75)); height: auto; aspect-ratio: 1 / 1; border-radius: 50%; position: absolute; z-index: 15; opacity: 0.5; border: 2px dashed rgba(255,255,255,0.8); pointer-events: none; transition: all 0.2s; animation: ghostPulse 1s infinite alternate; }
 @keyframes ghostPulse { 0% { transform: scale(0.9); opacity: 0.4; } 100% { transform: scale(1.0); opacity: 0.7; } }
-.splat { position: absolute; width: calc(100% / var(--grid-cols, 17)); height: auto; aspect-ratio: 1 / 1; border-radius: 50%; z-index: 10; pointer-events: none; clip-path: polygon(20% 0%, 30% 20%, 50% 0%, 60% 25%, 90% 5%, 80% 40%, 100% 50%, 80% 60%, 95% 85%, 60% 75%, 50% 100%, 40% 75%, 10% 90%, 25% 60%, 0% 50%, 25% 40%); animation: fadeSplat 2s forwards; }
+.splat { position: absolute; width: calc(100% / var(--grid-cols, 17) * var(--splat-scale, 0.85)); height: auto; aspect-ratio: 1 / 1; border-radius: 50%; z-index: 10; pointer-events: none; clip-path: polygon(20% 0%, 30% 20%, 50% 0%, 60% 25%, 90% 5%, 80% 40%, 100% 50%, 80% 60%, 95% 85%, 60% 75%, 50% 100%, 40% 75%, 10% 90%, 25% 60%, 0% 50%, 25% 40%); animation: fadeSplat 2s forwards; }
 @keyframes fadeSplat { 0% { opacity: 1; transform: scale(0); } 10% { transform: scale(1.5) rotate(10deg); } 100% { opacity: 0; transform: scale(1.5) rotate(20deg); } }
+
+#emoji-bar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.4);
+    border: 1px solid rgba(93, 64, 55, 0.2);
+    border-radius: 18px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: max-content;
+    max-width: 100%;
+}
+
+#emoji-slot-board,
+#emoji-slot-sidebar {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+#emoji-slot-sidebar {
+    margin-top: 10px;
+}
+
+.emoji-btn {
+    width: var(--tap-target);
+    height: var(--tap-target);
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.8);
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 2px 2px rgba(255,255,255,0.7), 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.emoji-btn:active {
+    transform: scale(0.92);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+}
+
+#emoji-stream {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1200;
+    overflow: hidden;
+}
+
+.emoji-float {
+    position: absolute;
+    font-size: 28px;
+    transform: translate(0, 0) scale(0.9);
+    opacity: 1;
+    animation: emojiFloat var(--emoji-duration, 1800ms) ease-out forwards;
+    will-change: transform, opacity;
+}
+
+@keyframes emojiFloat {
+    0% { transform: translate(0, 0) scale(0.9); opacity: 1; }
+    80% { opacity: 0.85; }
+    100% { transform: translate(var(--emoji-drift, 0px), calc(var(--emoji-rise, 160px) * -1)) scale(1.2); opacity: 0; }
+}
 
 #shortcut-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0); width: 80%; max-width: 300px; background: rgba(62, 39, 35, 0.95); border: 2px solid #d7ccc8; border-radius: 15px; padding: 20px; text-align: center; z-index: 500; box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: transform 0.3s; pointer-events: none; opacity: 0; color: white; }
 #shortcut-modal.active { transform: translate(-50%, -50%) scale(1); pointer-events: all; opacity: 1; }
@@ -508,6 +589,8 @@ body.mode-6p #board-container {
 @media (max-width: 600px) {
     :root {
         --board-size: 98vmin;
+        --piece-scale: 0.9;
+        --splat-scale: 0.95;
     }
 
     #menu-btn {
@@ -529,10 +612,6 @@ body.mode-6p #board-container {
     .mode-btn.visible {
         min-height: var(--tap-target);
         padding: 12px 8px;
-    }
-
-    .marble {
-        width: calc(100% / var(--grid-cols, 17) * 0.9);
     }
 
     .marble::after {

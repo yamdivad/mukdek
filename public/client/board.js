@@ -1,7 +1,14 @@
 (() => {
 const M = window.Mukdek;
 
-M.getPosStyle = function getPosStyle(col, row) {
+M.getCenteredPos = function getCenteredPos(
+    col,
+    row,
+    scaleVar = '--piece-scale',
+    scaleFallback = '0.75',
+    offsetPctX = 0,
+    offsetPctY = 0
+) {
     let mapData = gameLogic.MAPS[M.currentGameMode || '4p'];
     let cols = mapData ? mapData.gridCols : 17;
     let rows = mapData ? mapData.gridRows : 17;
@@ -9,13 +16,18 @@ M.getPosStyle = function getPosStyle(col, row) {
     let cellPctX = 100/cols;
     let cellPctY = 100/rows;
 
-    let centerX = (col * cellPctX) + (cellPctX/2);
-    let centerY = (row * cellPctY) + (cellPctY/2);
+    let centerX = (col * cellPctX) + (cellPctX/2) + offsetPctX;
+    let centerY = (row * cellPctY) + (cellPctY/2) + offsetPctY;
+    let scaleRef = `var(${scaleVar}, ${scaleFallback})`;
 
     return {
-        left: `calc(${centerX}% - 2.25%)`,
-        top: `calc(${centerY}% - 2.25%)`
+        left: `calc(${centerX}% - (100% / var(--grid-cols, 17) * ${scaleRef} / 2))`,
+        top: `calc(${centerY}% - (100% / var(--grid-rows, 17) * ${scaleRef} / 2))`
     };
+};
+
+M.getPosStyle = function getPosStyle(col, row) {
+    return M.getCenteredPos(col, row);
 };
 
 M.showGhost = function showGhost(mid) {

@@ -7,6 +7,7 @@ const RATE_LIMIT_MS = 200;
 const SIMILARITY_THRESHOLD = 10;
 const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
+const EMOJI_REACTIONS = new Set(['😡', '😱', '🫠', '🤣', '😳', '😎']);
 
 const BOT_PREFERRED_COLORS = {
     1: '#e74c3c',
@@ -78,6 +79,26 @@ function getNextAvailableBotColor(pid, currentPlayers) {
     return '#999999';
 }
 
+function formatDateLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function formatTimeLocal(date) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+}
+
+function csvEscape(value) {
+    const text = String(value ?? '');
+    if (!/[",\n]/.test(text)) return text;
+    return `"${text.replace(/"/g, '""')}"`;
+}
+
 class GameRoom {
     constructor(io, roomId, dataDir) {
         this.io = io;
@@ -97,6 +118,7 @@ class GameRoom {
         this.persistTimeout = null;
         this.persistInFlight = false;
         this.persistQueued = false;
+        this.emojiCooldowns = new Map();
 
         this.botAgent = new BotAgent(this, gameLogic);
 
@@ -220,6 +242,52 @@ class GameRoom {
         this.botAgent.scheduleNextAction();
     }
 
+    async logGameResultsIfNeeded() {
+        if (!this.gameState || this.gameState.phase !== 'gameover') return;
+        if (!this.gameState.stats || this.gameState.stats.gameResultsLogged) return;
+
+        const hasBots = Object.values(this.players).some(p => p && p.isBot);
+        if (hasBots) {
+            this.gameState.stats.gameResultsLogged = true;
+            this.schedulePersist();
+            return;
+        }
+
+        const finishOrder = (this.gameState.finishedPlayers || []).filter((pid) => {
+            let p = this.players[pid];
+            return p && !p.isBot;
+        });
+        if (finishOrder.length === 0) return;
+
+        const totalPlayers = this.totalPlayersAtStart || finishOrder.length;
+        const now = new Date();
+        const dateStr = formatDateLocal(now);
+        const timeStr = formatTimeLocal(now);
+        const nameMap = this.gameState.playerNames || {};
+
+        const rows = finishOrder.map((pid, idx) => ([
+            nameMap[pid] || `P${pid}`,
+            dateStr,
+            timeStr,
+            totalPlayers,
+            idx + 1
+        ]));
+
+        const filePath = path.join(this.dataDir, 'game-results.csv');
+        try {
+            await fs.promises.mkdir(this.dataDir, { recursive: true });
+            const needsHeader = !fs.existsSync(filePath);
+            let payload = '';
+            if (needsHeader) payload += 'Name,Date,Time,Total Players,Place\n';
+            payload += rows.map(row => row.map(csvEscape).join(',')).join('\n') + '\n';
+            await fs.promises.appendFile(filePath, payload);
+            this.gameState.stats.gameResultsLogged = true;
+            this.schedulePersist();
+        } catch (err) {
+            console.error(`Failed to write game results for room ${this.roomId}:`, err);
+        }
+    }
+
     isRateLimited(playerObj) {
         const now = Date.now();
         if (playerObj.lastAction && (now - playerObj.lastAction < RATE_LIMIT_MS)) {
@@ -227,6 +295,27 @@ class GameRoom {
         }
         playerObj.lastAction = now;
         return false;
+    }
+
+    isEmojiRateLimited(socketId) {
+        const now = Date.now();
+        const last = this.emojiCooldowns.get(socketId) || 0;
+        if (now - last < 400) return true;
+        this.emojiCooldowns.set(socketId, now);
+        return false;
+    }
+
+    onEmoji(socket, emoji) {
+        if (!this.gameState || this.gameState.phase === 'init') return;
+        if (typeof emoji !== 'string' || !EMOJI_REACTIONS.has(emoji)) return;
+
+        let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
+        if (!pEntry) return;
+
+        if (this.isEmojiRateLimited(socket.id)) return;
+
+        this.io.to(this.roomId).emit('emojiReaction', { emoji });
+        this.markActive();
     }
 
     addSocket(socket) {
@@ -267,6 +356,7 @@ class GameRoom {
         socket.on('toggleLightning', () => this.onToggleLightning(socket));
         socket.on('rollDice', () => this.onRollDice(socket));
         socket.on('makeMove', (data) => this.onMakeMove(socket, data));
+        socket.on('emoji', (emoji) => this.onEmoji(socket, emoji));
         socket.on('disconnect', () => this.onDisconnect(socket));
     }
 
@@ -560,6 +650,7 @@ class GameRoom {
 
     onDisconnect(socket) {
         this.connectedSockets.delete(socket.id);
+        this.emojiCooldowns.delete(socket.id);
         this.markActive();
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (pEntry) {
@@ -650,6 +741,20 @@ class GameRoom {
             });
             this.gameState.possibleMoves = movesMap;
 
+            if (this.gameState.stats) {
+                const stats = this.gameState.stats;
+                if (this.gameState.movableMarbles.length === 0) {
+                    stats.noMoveRolls[playerId] = (stats.noMoveRolls[playerId] || 0) + 1;
+                    stats.hotStreakCurrent[playerId] = 0;
+                } else {
+                    const nextStreak = (stats.hotStreakCurrent[playerId] || 0) + 1;
+                    stats.hotStreakCurrent[playerId] = nextStreak;
+                    if (nextStreak > (stats.hotStreakBest[playerId] || 0)) {
+                        stats.hotStreakBest[playerId] = nextStreak;
+                    }
+                }
+            }
+
             if (this.gameState.movableMarbles.length === 0) {
                 if (roll === 6 || roll === 1) {
                     this.gameState.message = `Rolled ${roll}. No moves, but Roll Again!`;
@@ -698,6 +803,22 @@ class GameRoom {
 
             marble.pos = { ...chosenMove.dest };
 
+            if (this.gameState.stats) {
+                const stats = this.gameState.stats;
+                if (stats.marbleRolls) {
+                    stats.marbleRolls[marble.id] = (stats.marbleRolls[marble.id] || 0) + 1;
+                }
+                if (stats.finishedMarbles && !stats.finishedMarbles[marble.id]
+                    && gameLogic.isHomePos(this.gameState.mode, marble.player, marble.pos)) {
+                    stats.finishedMarbles[marble.id] = true;
+                    const rolls = stats.marbleRolls ? (stats.marbleRolls[marble.id] || 0) : 0;
+                    const currentBest = stats.speedrunnerBest;
+                    if (!currentBest || rolls < currentBest.rolls) {
+                        stats.speedrunnerBest = { playerId: marble.player, rolls: rolls, marbleId: marble.id };
+                    }
+                }
+            }
+
             let pId = marble.player;
             let pName = this.gameState.playerNames[pId] || `P${pId}`;
             let inHome = this.gameState.marbles.filter(m => m.player === pId && gameLogic.isHomePos(this.gameState.mode, pId, m.pos)).length;
@@ -715,6 +836,7 @@ class GameRoom {
                 if (finishedRealPlayers >= this.totalPlayersAtStart - 1) {
                     this.gameState.message = `GAME OVER! ${pName} takes ${this.getOrdinal(myRank)} Place!`;
                     this.gameState.phase = 'gameover';
+                    void this.logGameResultsIfNeeded();
                 } else {
                     this.gameState.message = `${pName} takes ${this.getOrdinal(myRank)} Place!`;
                     this.broadcastGameState();
