@@ -6,7 +6,7 @@ const gameLogic = require(path.join(__dirname, '..', '..', 'public', 'js', 'game
 
 const RATE_LIMIT_MS = 200;
 const SIMILARITY_THRESHOLD = 10;
-const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60);
+const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60 * 24 * 15);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
 const EMOJI_REACTIONS = new Set(['😀', '🤣', '😎', '😡', '😱', '😳', '💩', '🫠', '☠️', '🎻']);
 
@@ -844,13 +844,7 @@ class GameRoom {
         }
 
         if (this.connectedSockets.size === 0) {
-            this.gameDestructionTimeout = setTimeout(() => {
-                if (this.connectedSockets.size > 0) return;
-                this.gameState = null;
-                this.players = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
-                this.clearBotTimers();
-                this.schedulePersist();
-            }, 60000);
+            this.clearBotTimers();
         }
         this.emitLobbyUpdate();
     }
@@ -1336,7 +1330,6 @@ class GameManager {
             if (room.connectedSockets.size > 0) continue;
             if (now - room.lastActive < ROOM_IDLE_TTL_MS) continue;
             this.rooms.delete(roomId);
-            this.deletePersistedRoom(roomId);
         }
     }
 
