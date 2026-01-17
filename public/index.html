@@ -17,81 +17,100 @@
     </div>
 
     <div id="lobby-overlay">
-        <div class="lobby-content">
-            
-            <div class="lobby-section ls-header">
-                <h1>Mukdek: Digital Edition</h1>
-            </div>
+        <div class="lobby-shell">
+            <header class="lobby-brand">
+                <div class="lobby-mark">Mukdek</div>
+                <div class="lobby-tagline">Digital Edition</div>
+            </header>
 
-            <div class="lobby-section ls-rooms">
-                <button id="rooms-toggle" class="rooms-toggle" type="button" aria-expanded="false" aria-controls="rooms-panel">
-                    Rooms
-                    <span class="rooms-toggle-icon" aria-hidden="true">+</span>
-                </button>
-                <div id="rooms-panel" class="rooms-panel" aria-hidden="true">
-                    <div class="room-controls">
-                        <label for="room-input" class="room-label">Room</label>
-                        <input id="room-input" type="text" placeholder="room-id" maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false">
-                        <button id="room-join-btn" type="button">GO</button>
-                        <button id="room-create-btn" type="button">NEW</button>
-                        <button id="room-copy-btn" type="button">COPY LINK</button>
+            <div class="lobby-grid">
+                <section class="lobby-card lobby-start">
+                    <div class="lobby-card-header">
+                        <h2>Start a game</h2>
+                        <p>Jump in fast or join a specific room.</p>
                     </div>
-                    <div class="room-list">
-                        <div class="room-list-header">
-                            <span>Active Rooms</span>
-                            <button id="room-refresh-btn" type="button">REFRESH</button>
+
+                    <div id="lobby-ui-join" class="lobby-join" style="display:block;">
+                        <p class="lobby-helper">Ready to play? We will place you in the best open room.</p>
+                        <button id="join-btn" onclick="Mukdek.joinGame()">PLAY NOW</button>
+                        <p class="lobby-helper-small">Already have a room name? Use Rooms to the right.</p>
+                    </div>
+
+                    <div id="lobby-ui-select" class="lobby-identity" style="display:none;">
+                        <p class="lobby-helper-strong">You are <strong>Player <span id="lobby-pid">?</span></strong></p>
+                        <input type="text" id="name-input" placeholder="INITIALS" maxlength="3">
+                        <p class="lobby-helper">Choose your marble color:</p>
+                        <div class="color-grid" id="color-container"></div>
+                    </div>
+                </section>
+
+                <section class="lobby-card lobby-rooms">
+                    <div class="lobby-card-header">
+                        <h2>Rooms</h2>
+                        <p>Join, create, or share a room link.</p>
+                    </div>
+                    <button id="rooms-toggle" class="rooms-toggle" type="button" aria-expanded="false" aria-controls="rooms-panel">
+                        Rooms
+                        <span class="rooms-toggle-icon" aria-hidden="true">+</span>
+                    </button>
+                    <div id="rooms-panel" class="rooms-panel" aria-hidden="true">
+                        <div class="room-controls">
+                            <label for="room-input" class="room-label">Room</label>
+                            <input id="room-input" type="text" placeholder="room-id" maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false">
+                            <button id="room-join-btn" type="button">GO</button>
+                            <button id="room-create-btn" type="button">NEW</button>
+                            <button id="room-copy-btn" type="button">COPY LINK</button>
                         </div>
-                        <div id="room-refresh-hint">Updated just now</div>
-                        <div id="room-list-body">Loading...</div>
+                        <div class="room-list">
+                            <div class="room-list-header">
+                                <span>Active Rooms</span>
+                                <button id="room-refresh-btn" type="button">REFRESH</button>
+                            </div>
+                            <div id="room-refresh-hint">Updated just now</div>
+                            <div id="room-list-body">Loading...</div>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </section>
 
-            <div class="lobby-section ls-identity">
-                <div id="lobby-ui-join" style="display:block;">
-                    <p style="color:#d7ccc8; margin-bottom:15px;">Waiting to join...</p>
-                    <button id="join-btn" onclick="Mukdek.joinGame()">JOIN GAME</button>
-                </div>
-
-                <div id="lobby-ui-select" style="display:none;">
-                    <p style="color:white; margin-bottom: 5px;">You are <strong>Player <span id="lobby-pid">?</span></strong></p>
-                    <input type="text" id="name-input" placeholder="INITIALS" maxlength="3">
-                    <p style="color:#d7ccc8; font-size: 0.9em; margin-top:10px;">Choose your marble color:</p>
-                    <div class="color-grid" id="color-container"></div>
-                </div>
-            </div>
-
-            <div class="lobby-section ls-state">
-                <p style="color:#d7ccc8; font-size: 0.9em; margin-bottom:5px;">PLAYERS & BOTS:</p>
-                <div id="ready-tracker">
-                    <div id="tk-1" class="tracker-slot" title="Player 1"></div>
-                    <div id="tk-2" class="tracker-slot" title="Player 2"></div>
-                    <div id="tk-3" class="tracker-slot" title="Player 3"></div>
-                    <div id="tk-4" class="tracker-slot" title="Player 4"></div>
-                    <div id="tk-5" class="tracker-slot" title="Player 5"></div>
-                    <div id="tk-6" class="tracker-slot" title="Player 6"></div>
-                    <div class="tracker-upcoming" aria-hidden="true">
-                        <span class="tracker-upcoming-banner">COMING SOON</span>
-                        <div class="tracker-slot ghost-slot" title="Player 7 (Coming Soon)"></div>
-                        <div class="tracker-slot ghost-slot" title="Player 8 (Coming Soon)"></div>
+                <section class="lobby-card lobby-players">
+                    <div class="lobby-card-header">
+                        <h2>Players</h2>
+                        <p>Track readiness and choose the game mode.</p>
                     </div>
-                </div>
+                    <div id="ready-tracker">
+                        <div id="tk-1" class="tracker-slot" title="Player 1"></div>
+                        <div id="tk-2" class="tracker-slot" title="Player 2"></div>
+                        <div id="tk-3" class="tracker-slot" title="Player 3"></div>
+                        <div id="tk-4" class="tracker-slot" title="Player 4"></div>
+                        <div id="tk-5" class="tracker-slot" title="Player 5"></div>
+                        <div id="tk-6" class="tracker-slot" title="Player 6"></div>
+                        <div class="tracker-upcoming" aria-hidden="true">
+                            <span class="tracker-upcoming-banner">COMING SOON</span>
+                            <div class="tracker-slot ghost-slot" title="Player 7 (Coming Soon)"></div>
+                            <div class="tracker-slot ghost-slot" title="Player 8 (Coming Soon)"></div>
+                        </div>
+                    </div>
 
-                <div id="mode-selector">
-                    <button id="btn-mode-2p" class="mode-btn visible" style="background:#2e7d32;" onclick="Mukdek.selectMode('2p')">DUEL (2P)</button>
-                    <button id="btn-mode-4p" class="mode-btn visible" style="background:#a1887f;" onclick="Mukdek.selectMode('4p')">CLASSIC (4P)</button>
-                    <button id="btn-mode-6p" class="mode-btn" style="background:#a1887f;" onclick="Mukdek.selectMode('6p')">CHAOS (6P)</button>
-                </div>
+                    <div id="mode-selector">
+                        <button id="btn-mode-2p" class="mode-btn visible" style="background:#2e7d32;" onclick="Mukdek.selectMode('2p')">DUEL (2P)</button>
+                        <button id="btn-mode-4p" class="mode-btn visible" style="background:#a1887f;" onclick="Mukdek.selectMode('4p')">CLASSIC (4P)</button>
+                        <button id="btn-mode-6p" class="mode-btn" style="background:#a1887f;" onclick="Mukdek.selectMode('6p')">CHAOS (6P)</button>
+                    </div>
+                </section>
+
+                <section class="lobby-card lobby-actions">
+                    <div class="lobby-card-header">
+                        <h2>Ready check</h2>
+                        <p>Confirm when you are ready and start the match.</p>
+                    </div>
+                    <div id="lobby-msg">Waiting for others...</div>
+                    <div class="lobby-action-buttons">
+                        <button id="ready-btn" style="display:none;" onclick="Mukdek.clickReady(true)">I'M READY</button>
+                        <button id="start-btn" style="display:none;" onclick="Mukdek.requestStart()">START GAME</button>
+                        <button id="claim-host-btn" onclick="Mukdek.claimHostManual()">CLAIM HOST 👑</button>
+                    </div>
+                </section>
             </div>
-
-            <div class="lobby-section ls-actions">
-                <div id="lobby-msg" style="margin-bottom:10px; font-style:italic; color:#d7ccc8">Waiting for others...</div>
-                
-                <button id="ready-btn" style="display:none;" onclick="Mukdek.clickReady(true)">I'M READY</button>
-                <button id="start-btn" style="display:none;" onclick="Mukdek.requestStart()">START GAME</button>
-                <button id="claim-host-btn" onclick="Mukdek.claimHostManual()">CLAIM HOST 👑</button>
-            </div>
-
         </div>
     </div>
 
