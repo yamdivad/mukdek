@@ -161,6 +161,7 @@
         <div id="main-menu" role="menu" aria-label="Main menu" aria-hidden="true">
             <button id="menu-stats" type="button">GAME STATS</button>
             <button id="menu-lightning" type="button">ENABLE LIGHTNING</button>
+            <button id="menu-notifications" type="button">ENABLE TURN ALERTS</button>
             <button id="menu-restart" type="button">RESTART GAME</button>
         </div>
     </div>
@@ -184,6 +185,10 @@
                 <button id="roll-btn" class="btn-base" disabled>Wait for Game</button>
             </div>
             <div id="message">Waiting for start...</div>
+            <div id="turn-alert-banner" class="turn-alert-banner" role="status" aria-live="polite">
+                <div class="turn-alert-text">Enable Turn Alerts in the menu so you hear when it is your turn.</div>
+                <button id="turn-alert-dismiss" class="turn-alert-dismiss" type="button" aria-label="Dismiss turn alerts tip">Got it</button>
+            </div>
             <div id="emoji-slot-sidebar"></div>
 
             <div id="stats-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="stats-title">

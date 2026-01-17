@@ -307,7 +307,8 @@
             marbleRolls: {},
             finishedMarbles: {},
             speedrunnerBest: null,
-            gameResultsLogged: false
+            gameResultsLogged: false,
+            startTime: Date.now()
         };
         for(let i=1; i<=playerCount; i++) {
             statsObj.murders[i] = 0;
@@ -325,6 +326,7 @@
             playerColors: assignedColors,
             finishedPlayers: [], 
             currentRoll: 0,
+            turnCounter: 0,
             dice: { values: [], pending: [] },
             selectedRoll: null,
             doubleStreak: { playerId: null, value: null, count: 0 },

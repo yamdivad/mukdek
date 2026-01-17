@@ -26,6 +26,7 @@ Mukdek.turnSoundTimeout = null;
 Mukdek.isLightningMode = false;
 Mukdek.celebratedPlayers = new Set();
 Mukdek.constipationPlayedBy = new Set();
+Mukdek.constipationKey = null;
 Mukdek.isFirstRender = true;
 Mukdek.currentGameMode = '4p';
 Mukdek.uiState = { statsOpen: false, mainMenuOpen: false };
@@ -35,6 +36,8 @@ Mukdek.introStorageKey = 'mukdek_intro_last_played';
 Mukdek.canPlaySounds = function canPlaySounds() {
     return !document.body.classList.contains('lobby-open');
 };
+Mukdek.pushEnabled = false;
+Mukdek.pushSubscription = null;
 
 Mukdek.faviconLink = document.getElementById("dynamic-favicon");
 Mukdek.originalFavicon = "favicon.svg";
@@ -115,6 +118,7 @@ Mukdek.dom = {
     mainMenu: document.getElementById('main-menu'),
     menuStats: document.getElementById('menu-stats'),
     menuLightning: document.getElementById('menu-lightning'),
+    menuNotifications: document.getElementById('menu-notifications'),
     menuRestart: document.getElementById('menu-restart'),
     nameInput: document.getElementById('name-input'),
     lightningPop: document.getElementById('lightning-pop'),
@@ -146,7 +150,9 @@ Mukdek.dom = {
     emojiBar: document.getElementById('emoji-bar'),
     emojiStream: document.getElementById('emoji-stream'),
     emojiSlotBoard: document.getElementById('emoji-slot-board'),
-    emojiSlotSidebar: document.getElementById('emoji-slot-sidebar')
+    emojiSlotSidebar: document.getElementById('emoji-slot-sidebar'),
+    turnAlertBanner: document.getElementById('turn-alert-banner'),
+    turnAlertDismiss: document.getElementById('turn-alert-dismiss')
 };
 
 Mukdek.getIntroSource = function getIntroSource() {
@@ -239,10 +245,47 @@ Mukdek.isHomeStaggered = function isHomeStaggered(state, playerId) {
     return false;
 };
 
+Mukdek.getConstipationStorageKey = function getConstipationStorageKey(state) {
+    if (!state || !state.stats || !state.stats.startTime) return null;
+    const roomId = Mukdek.roomId || 'lobby';
+    return `mukdek_constipation_${roomId}_${state.stats.startTime}`;
+};
+
+Mukdek.loadConstipationPlayed = function loadConstipationPlayed(key) {
+    Mukdek.constipationPlayedBy = new Set();
+    if (!key) return;
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            parsed.forEach((pid) => Mukdek.constipationPlayedBy.add(pid));
+        }
+    } catch (err) {
+        // Ignore storage failures.
+    }
+};
+
+Mukdek.saveConstipationPlayed = function saveConstipationPlayed(key) {
+    if (!key) return;
+    try {
+        const payload = JSON.stringify(Array.from(Mukdek.constipationPlayedBy));
+        localStorage.setItem(key, payload);
+    } catch (err) {
+        // Ignore storage failures.
+    }
+};
+
 Mukdek.maybePlayConstipation = function maybePlayConstipation(state) {
     if (!state || state.phase !== 'play') return;
     if (!Mukdek.constipationAudio) return;
     if (!Mukdek.canPlaySounds()) return;
+
+    const storageKey = Mukdek.getConstipationStorageKey(state);
+    if (storageKey && storageKey !== Mukdek.constipationKey) {
+        Mukdek.constipationKey = storageKey;
+        Mukdek.loadConstipationPlayed(storageKey);
+    }
 
     const maxP = (state.mode === '2p') ? 2 : (state.mode === '6p' ? 6 : 4);
     for (let pid = 1; pid <= maxP; pid++) {
@@ -251,6 +294,7 @@ Mukdek.maybePlayConstipation = function maybePlayConstipation(state) {
         Mukdek.constipationPlayedBy.add(pid);
         Mukdek.constipationAudio.currentTime = 0;
         Mukdek.constipationAudio.play().catch(() => {});
+        Mukdek.saveConstipationPlayed(storageKey);
         break;
     }
 };
@@ -258,6 +302,7 @@ Mukdek.maybePlayConstipation = function maybePlayConstipation(state) {
 Mukdek.pendingShortcutMarbleId = null;
 Mukdek.pendingShortcutMoves = null;
 Mukdek.isFirstStatusLoad = true;
+Mukdek.lastLightningStatus = null;
 Mukdek.pendingRoomSuggestion = null;
 Mukdek.pendingConfirmAction = null;
 

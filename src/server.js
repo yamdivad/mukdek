@@ -69,11 +69,13 @@ const io = socketIo(server, {
 });
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(express.json({ limit: '200kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'server', 'data');
 const gameManager = new GameManager(io, DATA_DIR);
 const restartToken = process.env.RESTART_TOKEN;
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const adminToken = process.env.ADMIN_TOKEN;
 
 const isLocalRequest = (req) => {
@@ -107,6 +109,36 @@ app.get('/restart', (req, res) => {
 
 app.get('/rooms', (req, res) => {
     res.json({ rooms: gameManager.getRoomsSummary() });
+});
+
+app.get('/push/vapid-public-key', (req, res) => {
+    if (!vapidPublicKey) {
+        res.status(503).json({ error: 'Push not configured' });
+        return;
+    }
+    res.json({ publicKey: vapidPublicKey });
+});
+
+app.post('/push/subscribe', (req, res) => {
+    const { roomId, sessionId, subscription } = req.body || {};
+    if (!roomId || !sessionId || !subscription) {
+        res.status(400).json({ error: 'Missing payload' });
+        return;
+    }
+    const room = gameManager.getRoom(roomId);
+    room.setPushSubscription(sessionId, subscription);
+    res.json({ ok: true });
+});
+
+app.post('/push/unsubscribe', (req, res) => {
+    const { roomId, sessionId } = req.body || {};
+    if (!roomId || !sessionId) {
+        res.status(400).json({ error: 'Missing payload' });
+        return;
+    }
+    const room = gameManager.getRoom(roomId);
+    room.removePushSubscription(sessionId);
+    res.json({ ok: true });
 });
 
 app.get('/admin', (req, res) => {

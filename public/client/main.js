@@ -122,6 +122,156 @@ if (M.dom.menuLightning) {
     });
 }
 
+const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+};
+
+const updateNotificationMenuLabel = async () => {
+    if (!M.dom.menuNotifications) return;
+    if (!('Notification' in window)) {
+        M.dom.menuNotifications.textContent = 'NOTIFICATIONS UNAVAILABLE';
+        M.dom.menuNotifications.disabled = true;
+        return;
+    }
+    if (Notification.permission === 'denied') {
+        M.dom.menuNotifications.textContent = 'NOTIFICATIONS BLOCKED';
+        M.dom.menuNotifications.disabled = true;
+        return;
+    }
+    let enabled = false;
+    if ('serviceWorker' in navigator) {
+        try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            const sub = reg ? await reg.pushManager.getSubscription() : null;
+            enabled = !!sub;
+            M.pushSubscription = sub;
+            M.pushEnabled = enabled;
+        } catch (err) {
+            enabled = false;
+        }
+    }
+    M.dom.menuNotifications.textContent = enabled ? 'DISABLE TURN ALERTS' : 'ENABLE TURN ALERTS';
+    M.dom.menuNotifications.disabled = false;
+};
+
+const updateNotificationBanner = async () => {
+    if (!M.dom.turnAlertBanner) return;
+    if (document.body.classList.contains('lobby-open')) {
+        M.dom.turnAlertBanner.classList.remove('is-visible');
+        return;
+    }
+    let dismissed = false;
+    try {
+        dismissed = localStorage.getItem('mukdek_turn_alert_dismissed') === '1';
+    } catch (err) {
+        dismissed = false;
+    }
+    if (dismissed) {
+        M.dom.turnAlertBanner.classList.remove('is-visible');
+        return;
+    }
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        M.dom.turnAlertBanner.classList.remove('is-visible');
+        return;
+    }
+    await updateNotificationMenuLabel();
+    if (M.pushEnabled) {
+        M.dom.turnAlertBanner.classList.remove('is-visible');
+        return;
+    }
+    M.dom.turnAlertBanner.classList.add('is-visible');
+};
+
+M.updateNotificationBanner = updateNotificationBanner;
+
+const subscribeToNotifications = async () => {
+    if (!('serviceWorker' in navigator) || !('Notification' in window) || !M.socket) return;
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const keyRes = await fetch('/push/vapid-public-key');
+    if (!keyRes.ok) return;
+    const keyData = await keyRes.json();
+    const publicKey = keyData.publicKey;
+    if (!publicKey) return;
+
+    const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+    });
+
+    await fetch('/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            roomId: M.roomId,
+            sessionId: M.mySessionId,
+            subscription
+        })
+    });
+
+    M.pushSubscription = subscription;
+    M.pushEnabled = true;
+    await updateNotificationMenuLabel();
+    await updateNotificationBanner();
+};
+
+const unsubscribeFromNotifications = async () => {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub) {
+        await sub.unsubscribe();
+    }
+    await fetch('/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            roomId: M.roomId,
+            sessionId: M.mySessionId
+        })
+    });
+    M.pushSubscription = null;
+    M.pushEnabled = false;
+    await updateNotificationMenuLabel();
+    await updateNotificationBanner();
+};
+
+if (M.dom.menuNotifications) {
+    M.dom.menuNotifications.addEventListener('click', async () => {
+        M.setMainMenuOpen(false);
+        await updateNotificationMenuLabel();
+        if (M.pushEnabled) {
+            await unsubscribeFromNotifications();
+        } else {
+            await subscribeToNotifications();
+        }
+    });
+    updateNotificationMenuLabel();
+    updateNotificationBanner();
+}
+
+if (M.dom.turnAlertDismiss) {
+    M.dom.turnAlertDismiss.addEventListener('click', () => {
+        try {
+            localStorage.setItem('mukdek_turn_alert_dismissed', '1');
+        } catch (err) {
+            // Ignore storage failures.
+        }
+        if (M.dom.turnAlertBanner) {
+            M.dom.turnAlertBanner.classList.remove('is-visible');
+        }
+    });
+}
+
 if (M.dom.menuRestart) {
     M.dom.menuRestart.addEventListener('click', () => {
         M.setMainMenuOpen(false);
@@ -213,6 +363,21 @@ document.addEventListener('keydown', (event) => {
         M.hideShortcutTargetModal();
     }
 });
+
+const requestStateRefresh = () => {
+    if (!M.socket) return;
+    if (M.socket.connected) {
+        M.socket.emit('requestState');
+    } else if (typeof M.socket.connect === 'function') {
+        M.socket.connect();
+    }
+};
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) requestStateRefresh();
+});
+window.addEventListener('focus', requestStateRefresh);
+window.addEventListener('focus', updateNotificationBanner);
 
 M.initLobbyUI();
 M.refreshRooms();

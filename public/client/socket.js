@@ -36,39 +36,38 @@ M.socket.on('gameModeUpdate', (mode) => {
 
 M.socket.on('lightningStatus', (isOn) => {
     M.isLightningMode = isOn;
+    const prevStatus = M.lastLightningStatus;
+    M.lastLightningStatus = isOn;
 
     if (isOn) {
         if (M.dom.menuLightning) {
             M.dom.menuLightning.textContent = "DISABLE LIGHTNING";
         }
-
-        M.dom.lightningPop.innerHTML = "LIGHTNING MODE<br>ACTIVATED!";
-        M.dom.lightningPop.style.background = "rgba(255, 179, 0, 0.95)";
-        M.dom.lightningPop.style.color = "#3e2723";
-
-        M.dom.lightningPop.classList.remove('active');
-        void M.dom.lightningPop.offsetWidth;
-        M.dom.lightningPop.classList.add('active');
-        setTimeout(() => { M.dom.lightningPop.classList.remove('active'); }, 2000);
-
-        if (M.turnSoundTimeout) clearTimeout(M.turnSoundTimeout);
-
     } else {
         if (M.dom.menuLightning) {
             M.dom.menuLightning.textContent = "ENABLE LIGHTNING";
         }
-
-        if (!M.isFirstStatusLoad) {
-            M.dom.lightningPop.innerHTML = "LIGHTNING MODE<br>DISABLED";
-            M.dom.lightningPop.style.background = "rgba(66, 66, 66, 0.95)";
-            M.dom.lightningPop.style.color = "#ffffff";
-
-            M.dom.lightningPop.classList.remove('active');
-            void M.dom.lightningPop.offsetWidth;
-            M.dom.lightningPop.classList.add('active');
-            setTimeout(() => { M.dom.lightningPop.classList.remove('active'); }, 2000);
-        }
     }
+    if (prevStatus === null || prevStatus === isOn) {
+        M.isFirstStatusLoad = false;
+        return;
+    }
+
+    if (isOn) {
+        M.dom.lightningPop.innerHTML = "LIGHTNING MODE<br>ACTIVATED!";
+        M.dom.lightningPop.style.background = "rgba(255, 179, 0, 0.95)";
+        M.dom.lightningPop.style.color = "#3e2723";
+        if (M.turnSoundTimeout) clearTimeout(M.turnSoundTimeout);
+    } else {
+        M.dom.lightningPop.innerHTML = "LIGHTNING MODE<br>DISABLED";
+        M.dom.lightningPop.style.background = "rgba(66, 66, 66, 0.95)";
+        M.dom.lightningPop.style.color = "#ffffff";
+    }
+
+    M.dom.lightningPop.classList.remove('active');
+    void M.dom.lightningPop.offsetWidth;
+    M.dom.lightningPop.classList.add('active');
+    setTimeout(() => { M.dom.lightningPop.classList.remove('active'); }, 2000);
     M.isFirstStatusLoad = false;
 });
 
@@ -566,6 +565,9 @@ M.socket.on('gameStart', (mode) => {
     document.body.classList.remove('lobby-open');
     if (typeof M.setMainMenuOpen === 'function') {
         M.setMainMenuOpen(false);
+    }
+    if (typeof M.updateNotificationBanner === 'function') {
+        M.updateNotificationBanner();
     }
     if (typeof M.syncBoardOrientation === 'function') {
         M.syncBoardOrientation();

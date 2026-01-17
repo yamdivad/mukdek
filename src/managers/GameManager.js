@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const webpush = require('web-push');
 const BotAgent = require('./BotAgent');
 const HardBotAgent = require('./HardBotAgent');
 const gameLogic = require(path.join(__dirname, '..', '..', 'public', 'js', 'gameLogic.js'));
@@ -9,6 +10,15 @@ const SIMILARITY_THRESHOLD = 10;
 const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60 * 24 * 15);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
 const EMOJI_REACTIONS = new Set(['😀', '🤣', '😎', '😡', '😱', '😳', '💩', '🫠', '☠️', '🎻']);
+const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
+const PUSH_ENABLED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+
+if (PUSH_ENABLED) {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 
 const BOT_PREFERRED_COLORS = {
     1: '#e74c3c',
@@ -124,6 +134,8 @@ class GameRoom {
         this.persistInFlight = false;
         this.persistQueued = false;
         this.emojiCooldowns = new Map();
+        this.pushSubscriptions = new Map();
+        this.lastNotifiedTurn = 0;
 
         this.botAgent = new BotAgent(this, gameLogic);
         this.hardBotAgent = new HardBotAgent(this, gameLogic);
@@ -179,13 +191,23 @@ class GameRoom {
         return base;
     }
 
+    normalizePushSubscriptions(data) {
+        if (!data || typeof data !== 'object') return new Map();
+        const entries = Object.entries(data)
+            .filter(([sessionId, sub]) => sessionId && sub && typeof sub.endpoint === 'string')
+            .map(([sessionId, sub]) => [sessionId, sub]);
+        return new Map(entries);
+    }
+
     buildPersistedState() {
         return {
             players: this.normalizePlayers(this.players),
             gameState: this.gameState,
             gameMode: this.gameMode,
             lightningMode: this.lightningMode,
-            totalPlayersAtStart: this.totalPlayersAtStart
+            totalPlayersAtStart: this.totalPlayersAtStart,
+            pushSubscriptions: Object.fromEntries(this.pushSubscriptions),
+            lastNotifiedTurn: this.lastNotifiedTurn
         };
     }
 
@@ -232,12 +254,29 @@ class GameRoom {
             this.gameMode = ['2p', '4p', '6p'].includes(data.gameMode) ? data.gameMode : '4p';
             this.lightningMode = !!data.lightningMode;
             this.totalPlayersAtStart = Number.isFinite(data.totalPlayersAtStart) ? data.totalPlayersAtStart : 0;
+            this.pushSubscriptions = this.normalizePushSubscriptions(data.pushSubscriptions);
+            this.lastNotifiedTurn = Number.isFinite(data.lastNotifiedTurn) ? data.lastNotifiedTurn : 0;
             this.hostSocketId = null;
             this.connectedSockets = new Set();
             console.log(`Restored game state for room ${this.roomId}.`);
         } catch (err) {
             console.error(`Failed to load state for room ${this.roomId}:`, err);
         }
+    }
+
+    sendCurrentState(socket) {
+        socket.emit('lobbyUpdate', this.getLobbyState());
+        socket.emit('gameModeUpdate', this.gameMode);
+        if (this.gameState) {
+            socket.emit('gameStart', this.gameMode);
+            socket.emit('gameState', this.gameState);
+        }
+        socket.emit('lightningStatus', this.lightningMode);
+    }
+
+    onRequestState(socket) {
+        this.markActive();
+        this.sendCurrentState(socket);
     }
 
     emitLobbyUpdate() {
@@ -263,6 +302,7 @@ class GameRoom {
         this.markActive();
         this.schedulePersist();
         this.scheduleBotAction();
+        void this.maybeNotifyTurn();
     }
 
     async logGameResultsIfNeeded() {
@@ -457,6 +497,60 @@ class GameRoom {
         this.markActive();
     }
 
+    setPushSubscription(sessionId, subscription) {
+        if (!sessionId || !subscription || typeof subscription.endpoint !== 'string') return;
+        this.pushSubscriptions.set(sessionId, subscription);
+        this.schedulePersist();
+    }
+
+    removePushSubscription(sessionId) {
+        if (!sessionId) return;
+        if (this.pushSubscriptions.delete(sessionId)) {
+            this.schedulePersist();
+        }
+    }
+
+    buildRoomUrl() {
+        const base = PUBLIC_ORIGIN ? PUBLIC_ORIGIN.replace(/\/$/, '') : '';
+        const path = `/?room=${encodeURIComponent(this.roomId)}`;
+        return base ? `${base}${path}` : path;
+    }
+
+    async maybeNotifyTurn() {
+        if (!PUSH_ENABLED) return;
+        if (!this.gameState || this.gameState.phase !== 'play') return;
+        const turnCounter = this.gameState.turnCounter || 0;
+        if (turnCounter === this.lastNotifiedTurn) return;
+
+        const playerId = this.gameState.activePlayer;
+        const player = this.players[playerId];
+        if (!player || player.isBot) {
+            this.lastNotifiedTurn = turnCounter;
+            return;
+        }
+
+        const subscription = this.pushSubscriptions.get(player.session);
+        if (!subscription) return;
+
+        this.lastNotifiedTurn = turnCounter;
+        const playerName = (this.gameState.playerNames && this.gameState.playerNames[playerId]) || `P${playerId}`;
+        const payload = JSON.stringify({
+            title: 'Your turn',
+            body: `${playerName}, it's your move.`,
+            url: this.buildRoomUrl()
+        });
+
+        try {
+            await webpush.sendNotification(subscription, payload);
+        } catch (err) {
+            if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+                this.removePushSubscription(player.session);
+            } else {
+                console.error(`Push send failed for room ${this.roomId}:`, err);
+            }
+        }
+    }
+
     addSocket(socket) {
         socket.join(this.roomId);
         this.connectedSockets.add(socket.id);
@@ -471,16 +565,10 @@ class GameRoom {
             this.hostSocketId = socket.id;
         }
 
-        socket.emit('lobbyUpdate', this.getLobbyState());
-        socket.emit('gameModeUpdate', this.gameMode);
-
-        if (this.gameState) {
-            socket.emit('gameStart', this.gameMode);
-            socket.emit('gameState', this.gameState);
-        }
-        socket.emit('lightningStatus', this.lightningMode);
+        this.sendCurrentState(socket);
 
         socket.on('register', (sessionId) => this.onRegister(socket, sessionId));
+        socket.on('requestState', () => this.onRequestState(socket));
         socket.on('joinGame', (sessionId) => this.onJoinGame(socket, sessionId));
         socket.on('setGameMode', (mode) => this.onSetGameMode(socket, mode));
         socket.on('addBot', (seatIndex) => this.onAddBot(socket, seatIndex));
@@ -515,12 +603,7 @@ class GameRoom {
                 this.hostSocketId = socket.id;
             }
 
-            socket.emit('lobbyUpdate', this.getLobbyState());
-            if (this.gameState) {
-                socket.emit('gameStart', this.gameMode);
-                socket.emit('gameState', this.gameState);
-            }
-            socket.emit('lightningStatus', this.lightningMode);
+            this.sendCurrentState(socket);
         } else {
             socket.emit('lobbyUpdate', this.getLobbyState());
         }
@@ -887,6 +970,7 @@ class GameRoom {
                     this.gameState.activePlayer = winners[0];
                     const winnerName = this.gameState.playerNames[winners[0]] || `P${winners[0]}`;
                     this.gameState.phase = 'play';
+                    this.gameState.turnCounter = (this.gameState.turnCounter || 0) + 1;
                     this.gameState.message = `${winnerName} starts!`;
                     this.gameState.currentRoll = 0;
                 } else {
@@ -973,6 +1057,7 @@ class GameRoom {
                 this.gameState.activePlayer = winners[0];
                 const winnerName = this.gameState.playerNames[winners[0]] || `P${winners[0]}`;
                 this.gameState.phase = 'play';
+                this.gameState.turnCounter = (this.gameState.turnCounter || 0) + 1;
                 this.gameState.message = `${winnerName} starts!`;
                 this.gameState.currentRoll = 0;
             } else {
@@ -1266,6 +1351,9 @@ class GameRoom {
             this.gameState.dice.pending = [];
             this.gameState.selectedRoll = null;
             this.gameState.doubleStreak = { playerId: null, value: null, count: 0 };
+        }
+        if (this.gameState.phase === 'play') {
+            this.gameState.turnCounter = (this.gameState.turnCounter || 0) + 1;
         }
         let nextName = (this.gameState.playerNames && this.gameState.playerNames[this.gameState.activePlayer]) || `P${this.gameState.activePlayer}`;
         this.gameState.message = `${nextName}'s turn.`;
