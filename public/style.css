@@ -5,6 +5,8 @@
     --tap-target-small: 36px;
     --piece-scale: 0.75;
     --splat-scale: 0.85;
+    --controls-height: 120px;
+    --message-height: 2.6em;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,10 +21,13 @@ body {
 }
 
 body.intro-active {
-    overflow: hidden;
+    overflow: auto;
 }
 
 body.intro-active #lobby-overlay {
+    display: none;
+}
+body.lobby-open #game-header {
     display: none;
 }
 
@@ -43,7 +48,7 @@ body.mode-6p:not(.lobby-open) #board-container {
 #lobby-overlay { 
     position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
     background: rgba(62, 39, 35, 0.98); z-index: 2000; 
-    display: flex; flex-direction: column; align-items: center; justify-content: center; 
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start; 
     overflow-y: auto; overflow-x: hidden; padding: 20px; pointer-events: none;
 }
 
@@ -526,7 +531,7 @@ body.mode-6p:not(.lobby-open) #board-container {
 }
 
 @media (min-aspect-ratio: 1.2/1) {
-    :root { --board-size: 80vh; }
+    :root { --board-size: 80vh; --controls-height: 110px; --message-height: 2.4em; }
     body.mode-6p:not(.lobby-open) { --board-size: 88vh; }
     body { justify-content: center; padding-bottom: 0; overflow: hidden; }
     #game-area { flex-direction: row; justify-content: center; align-items: center; gap: 40px; height: calc(100vh - 60px); }
@@ -565,7 +570,21 @@ body.mode-6p:not(.lobby-open) #board-container {
 .player-status.empty-slot { text-decoration: line-through; opacity: 0.5; }
 .player-status strong { display: block; font-size: 1.2em; }
 
-#controls { margin-bottom: 10px; width: 95%; min-height: 80px; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 20px; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 15px; }
+#controls { margin-bottom: 10px; width: 95%; min-height: 80px; height: var(--controls-height); display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 20px; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 15px; }
+#message {
+    text-align: center;
+    font-weight: bold;
+    color: #5d4037;
+    margin-top: 5px;
+    min-height: var(--message-height);
+    height: var(--message-height);
+    line-height: 1.3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    overflow: hidden;
+}
 #dice { font-size: 5em; cursor: pointer; color: #3e2723; width: auto; height: auto; line-height: 1.2; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; }
 #dice .die-btn,
 #dice .sum-btn {
@@ -719,6 +738,8 @@ body.mode-6p #dice {
         --board-size: 98vmin;
         --piece-scale: 0.9;
         --splat-scale: 0.95;
+        --controls-height: 130px;
+        --message-height: 3em;
     }
 
     #menu-btn {

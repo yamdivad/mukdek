@@ -330,8 +330,9 @@ M.renderState = function renderState(state) {
 
             let duration = (M.lastActivePlayer !== M.myPlayerId) ? 5000 : 15000;
 
-            if (!M.isLightningMode) {
+            if (!M.isLightningMode && M.canPlaySounds()) {
                 M.turnSoundTimeout = setTimeout(() => {
+                    if (!M.canPlaySounds()) return;
                     M.turnAudio.currentTime = 0;
                     M.turnAudio.play().catch(e => console.log("Audio blocked"));
                 }, duration);
@@ -563,6 +564,9 @@ M.socket.on('gameStart', (mode) => {
     M.currentGameMode = mode;
     document.body.classList.toggle('mode-6p', mode === '6p');
     document.body.classList.remove('lobby-open');
+    if (typeof M.setMainMenuOpen === 'function') {
+        M.setMainMenuOpen(false);
+    }
     if (typeof M.syncBoardOrientation === 'function') {
         M.syncBoardOrientation();
     }
@@ -577,6 +581,9 @@ M.socket.on('gameStart', (mode) => {
 M.socket.on('gameReset', () => {
      M.dom.lobbyOverlay.style.display = 'flex';
      document.body.classList.add('lobby-open');
+     if (typeof M.setMainMenuOpen === 'function') {
+         M.setMainMenuOpen(false);
+     }
      M.dom.board.innerHTML = '';
      M.initBoard(M.currentGameMode);
      M.celebratedPlayers.clear();

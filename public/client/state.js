@@ -30,6 +30,11 @@ Mukdek.isFirstRender = true;
 Mukdek.currentGameMode = '4p';
 Mukdek.uiState = { statsOpen: false, mainMenuOpen: false };
 Mukdek.introState = { active: false, completed: false };
+Mukdek.introCooldownMs = 24 * 60 * 60 * 1000;
+Mukdek.introStorageKey = 'mukdek_intro_last_played';
+Mukdek.canPlaySounds = function canPlaySounds() {
+    return !document.body.classList.contains('lobby-open');
+};
 
 Mukdek.faviconLink = document.getElementById("dynamic-favicon");
 Mukdek.originalFavicon = "favicon.svg";
@@ -158,11 +163,25 @@ Mukdek.finishIntro = function finishIntro() {
     document.body.classList.remove('intro-active');
     Mukdek.dom.introVideo.pause();
     Mukdek.dom.introVideo.currentTime = 0;
+    try {
+        localStorage.setItem(Mukdek.introStorageKey, String(Date.now()));
+    } catch (err) {
+        // Ignore storage failures.
+    }
 };
 
 Mukdek.initIntro = function initIntro() {
     if (!Mukdek.dom.introOverlay || !Mukdek.dom.introVideo) return;
     if (Mukdek.introState.completed) return;
+    try {
+        const lastPlayed = Number(localStorage.getItem(Mukdek.introStorageKey)) || 0;
+        if (Date.now() - lastPlayed < Mukdek.introCooldownMs) {
+            Mukdek.introState.completed = true;
+            return;
+        }
+    } catch (err) {
+        // Ignore storage failures and show intro.
+    }
 
     const src = Mukdek.getIntroSource();
     if (Mukdek.dom.introVideo.getAttribute('src') !== src) {
@@ -223,6 +242,7 @@ Mukdek.isHomeStaggered = function isHomeStaggered(state, playerId) {
 Mukdek.maybePlayConstipation = function maybePlayConstipation(state) {
     if (!state || state.phase !== 'play') return;
     if (!Mukdek.constipationAudio) return;
+    if (!Mukdek.canPlaySounds()) return;
 
     const maxP = (state.mode === '2p') ? 2 : (state.mode === '6p' ? 6 : 4);
     for (let pid = 1; pid <= maxP; pid++) {

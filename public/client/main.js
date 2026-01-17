@@ -2,6 +2,9 @@
 const M = window.Mukdek;
 
 document.body.classList.add('lobby-open');
+if (typeof M.setMainMenuOpen === 'function') {
+    M.setMainMenuOpen(false);
+}
 
 if (M.socket) {
     M.dom.nameInput.addEventListener('input', (e) => {
