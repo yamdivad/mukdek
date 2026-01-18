@@ -153,12 +153,14 @@ body.mode-6p:not(.lobby-open) #board-container {
         grid-template-columns: 1.15fr 0.85fr;
         grid-template-areas:
             "start rooms"
-            "players actions";
+            "players actions"
+            "install install";
     }
     .lobby-start { grid-area: start; }
     .lobby-rooms { grid-area: rooms; }
     .lobby-players { grid-area: players; }
     .lobby-actions { grid-area: actions; }
+    .lobby-install { grid-area: install; }
 }
 
 .lobby-card {
@@ -224,6 +226,57 @@ body.mode-6p:not(.lobby-open) #board-container {
     margin-bottom: 12px;
     font-style: italic;
     color: rgba(245, 228, 210, 0.75);
+}
+.lobby-install .lobby-card-header h2 {
+    font-size: 0.95em;
+}
+.lobby-install .lobby-card-header p {
+    font-size: 0.85em;
+    color: rgba(245, 228, 210, 0.65);
+}
+.install-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(245, 228, 210, 0.85);
+    font-size: 0.9em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.install-toggle-icon {
+    font-size: 1.2em;
+    transition: transform 0.2s ease;
+}
+.install-toggle.is-open .install-toggle-icon {
+    transform: rotate(45deg);
+}
+.install-panel {
+    display: none;
+    margin-top: 12px;
+}
+.install-panel.active {
+    display: block;
+}
+.install-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.install-label {
+    font-size: 0.8em;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(245, 228, 210, 0.6);
+    margin-bottom: 2px;
+}
+.install-text {
+    font-size: 0.9em;
+    color: rgba(245, 228, 210, 0.85);
 }
 
 /* LOBBY SECTIONS */

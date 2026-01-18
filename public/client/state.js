@@ -22,6 +22,10 @@ Mukdek.lastLeaderId = null;
 Mukdek.lastActivePlayer = null;
 Mukdek.turnAudio = document.getElementById('turn-audio');
 Mukdek.constipationAudio = document.getElementById('constipation-audio');
+Mukdek.disableConstipationAudio = true;
+if (Mukdek.disableConstipationAudio) {
+    Mukdek.constipationAudio = null;
+}
 Mukdek.turnSoundTimeout = null;
 Mukdek.isLightningMode = false;
 Mukdek.celebratedPlayers = new Set();
@@ -147,6 +151,8 @@ Mukdek.dom = {
     noticeOk: document.getElementById('notice-ok'),
     roomsToggle: document.getElementById('rooms-toggle'),
     roomsPanel: document.getElementById('rooms-panel'),
+    installToggle: document.getElementById('install-toggle'),
+    installPanel: document.getElementById('install-panel'),
     emojiBar: document.getElementById('emoji-bar'),
     emojiStream: document.getElementById('emoji-stream'),
     emojiSlotBoard: document.getElementById('emoji-slot-board'),
@@ -458,6 +464,15 @@ Mukdek.setRoomsPanelOpen = function setRoomsPanelOpen(isOpen, options = {}) {
     Mukdek.dom.roomsPanel.setAttribute('aria-hidden', String(!next));
     const shouldRefresh = options.refresh !== false;
     if (next && shouldRefresh) Mukdek.refreshRooms();
+};
+
+Mukdek.setInstallPanelOpen = function setInstallPanelOpen(isOpen) {
+    if (!Mukdek.dom.installPanel || !Mukdek.dom.installToggle) return;
+    const next = Boolean(isOpen);
+    Mukdek.dom.installPanel.classList.toggle('active', next);
+    Mukdek.dom.installToggle.classList.toggle('is-open', next);
+    Mukdek.dom.installToggle.setAttribute('aria-expanded', String(next));
+    Mukdek.dom.installPanel.setAttribute('aria-hidden', String(!next));
 };
 
 Mukdek.updateJoinButtonForRooms = function updateJoinButtonForRooms() {

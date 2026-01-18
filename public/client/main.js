@@ -33,6 +33,12 @@ if (M.dom.roomsToggle && M.dom.roomsPanel) {
         M.setRoomsPanelOpen(!isOpen, { refresh: true });
     });
 }
+if (M.dom.installToggle && M.dom.installPanel) {
+    M.dom.installToggle.addEventListener('click', () => {
+        const isOpen = M.dom.installPanel.classList.contains('active');
+        M.setInstallPanelOpen(!isOpen);
+    });
+}
 if (M.dom.roomRefreshBtn) {
     M.dom.roomRefreshBtn.addEventListener('click', () => M.refreshRooms());
 }
