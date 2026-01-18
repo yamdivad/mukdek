@@ -112,6 +112,14 @@
                         <p>Confirm when you are ready and start the match.</p>
                     </div>
                     <div id="lobby-msg">Waiting for others...</div>
+                    <div id="lobby-start-config" class="lobby-start-config" style="display:none;">
+                        <label class="lobby-start-label" for="min-ready-select">Auto-start when ready:</label>
+                        <div class="lobby-start-row">
+                            <select id="min-ready-select" aria-label="Auto-start when ready"></select>
+                            <span class="lobby-start-suffix">players</span>
+                        </div>
+                    </div>
+                    <div id="lobby-countdown" class="lobby-countdown" aria-live="polite"></div>
                     <div class="lobby-action-buttons">
                         <button id="ready-btn" style="display:none;" onclick="Mukdek.clickReady(true)">I'M READY</button>
                         <button id="start-btn" style="display:none;" onclick="Mukdek.requestStart()">START GAME</button>
@@ -262,14 +270,6 @@
                     <button id="stats-close-btn" class="btn-base" type="button" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
                 </div>
             </div>
-
-            <div id="history-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="history-title">
-                <div class="modal-content">
-                    <h2 id="history-title">Game History</h2>
-                    <div id="history-body">Loading...</div>
-                    <button id="history-close-btn" class="btn-base" type="button" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
-                </div>
-            </div>
         </div>
 
         <div id="board-stack">
@@ -300,6 +300,14 @@
                     <button class="emoji-btn" data-emoji="🫠" aria-label="Melting face">🫠</button>
                     <button class="emoji-btn" data-emoji="☠️" aria-label="Skull and crossbones">☠️</button>
                     <button class="emoji-btn" data-emoji="🎻" aria-label="Violin">🎻</button>
+                </div>
+            </div>
+
+            <div id="history-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="history-title">
+                <div class="modal-content">
+                    <h2 id="history-title">Game History</h2>
+                    <div id="history-body">Loading...</div>
+                    <button id="history-close-btn" class="btn-base" type="button" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
                 </div>
             </div>
         </div>

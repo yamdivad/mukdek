@@ -119,6 +119,10 @@ M.selectMode = function selectMode(mode) {
     M.socket.emit('setGameMode', mode);
 };
 
+M.setMinPlayersToStart = function setMinPlayersToStart(count) {
+    M.socket.emit('setMinPlayersToStart', count);
+};
+
 M.initLobbyUI = function initLobbyUI() {
     M.dom.colorContainer.innerHTML = '';
     M.colorPalette.forEach((c, idx) => {
@@ -314,17 +318,88 @@ M.renderStats = function renderStats(stats, names) {
     }
 };
 
-M.renderHistory = function renderHistory(results) {
+M.renderHistory = function renderHistory(payload) {
     if (!M.dom.historyBody) return;
-    if (!Array.isArray(results) || results.length === 0) {
+    const games = Array.isArray(payload)
+        ? payload
+        : (payload && Array.isArray(payload.games) ? payload.games : null);
+    const legacyResults = payload && Array.isArray(payload.results) ? payload.results : null;
+
+    if ((!games || games.length === 0) && (!legacyResults || legacyResults.length === 0)) {
         M.dom.historyBody.textContent = 'No completed games yet.';
         return;
     }
-    let html = '<table class="stats-table"><tr><th>Date</th><th>Time</th><th>Name</th><th>Players</th><th>Place</th></tr>';
-    results.forEach((row) => {
-        html += `<tr><td>${row.date}</td><td>${row.time}</td><td>${row.name}</td><td>${row.totalPlayers}</td><td>${row.place}</td></tr>`;
+
+    if (legacyResults && legacyResults.length > 0 && (!games || games.length === 0)) {
+        let html = '<table class="stats-table"><tr><th>Date</th><th>Time</th><th>Name</th><th>Players</th><th>Place</th></tr>';
+        legacyResults.forEach((row) => {
+            html += `<tr><td>${row.date}</td><td>${row.time}</td><td>${row.name}</td><td>${row.totalPlayers}</td><td>${row.place}</td></tr>`;
+        });
+        html += '</table>';
+        M.dom.historyBody.innerHTML = html;
+        return;
+    }
+
+    const formatDate = (ts) => {
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return 'Unknown date';
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const formatTime = (ts) => {
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return 'Unknown time';
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+    };
+
+    const formatDuration = (ms) => {
+        if (!Number.isFinite(ms) || ms <= 0) return null;
+        const totalSec = Math.round(ms / 1000);
+        const mins = Math.floor(totalSec / 60);
+        const secs = totalSec % 60;
+        if (mins === 0) return `${secs}s`;
+        return `${mins}m ${String(secs).padStart(2, '0')}s`;
+    };
+
+    let html = '<div class="history-list">';
+    games.forEach((game) => {
+        const ts = Number.isFinite(game.endedAt) ? game.endedAt : game.startedAt;
+        const date = formatDate(ts);
+        const time = formatTime(ts);
+        const modeLabel = game.mode ? game.mode.toUpperCase() : 'GAME';
+        const lightning = game.lightningMode ? ' • Lightning' : '';
+        const totalPlayers = Number.isFinite(game.totalPlayers) ? game.totalPlayers : (game.placements ? game.placements.length : 0);
+        const duration = formatDuration(game.durationMs);
+        const metaBits = [`${date} ${time}`, `${totalPlayers} players`];
+        if (duration) metaBits.push(duration);
+
+        html += `<div class="history-card">`;
+        html += `<div class="history-card-header">`;
+        html += `<div class="history-card-title">${modeLabel}${lightning}</div>`;
+        html += `<div class="history-card-meta">${metaBits.join(' • ')}</div>`;
+        html += `</div>`;
+
+        const placements = Array.isArray(game.placements) ? game.placements.slice().sort((a, b) => a.place - b.place) : [];
+        if (placements.length > 0) {
+            html += `<ol class="history-placements">`;
+            placements.forEach((entry) => {
+                const color = entry.playerColor || '#a1887f';
+                const name = entry.playerName || 'Unknown';
+                const place = entry.place || '?';
+                html += `<li class="history-placement"><span class="history-place">${place}.</span><span class="history-dot" style="background:${color};"></span><span class="history-name">${name}</span></li>`;
+            });
+            html += `</ol>`;
+        } else {
+            html += `<div class="history-empty">No placements recorded.</div>`;
+        }
+        html += `</div>`;
     });
-    html += '</table>';
+    html += '</div>';
     M.dom.historyBody.innerHTML = html;
 };
 
@@ -335,7 +410,7 @@ M.fetchGameHistory = async function fetchGameHistory() {
         const res = await fetch('/results');
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
-        M.renderHistory(data.results || []);
+        M.renderHistory(data || {});
     } catch (err) {
         M.dom.historyBody.textContent = 'Unable to load history.';
     }

@@ -75,7 +75,8 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'server', 'data');
 const gameManager = new GameManager(io, DATA_DIR);
-const resultsFile = path.join(DATA_DIR, 'game-results.csv');
+const resultsFileJsonl = path.join(DATA_DIR, 'game-results.jsonl');
+const resultsFileCsv = path.join(DATA_DIR, 'game-results.csv');
 const restartToken = process.env.RESTART_TOKEN;
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const adminToken = process.env.ADMIN_TOKEN;
@@ -145,23 +146,41 @@ function parseCsvLine(line) {
 
 app.get('/results', async (req, res) => {
     try {
-        const raw = await fs.promises.readFile(resultsFile, 'utf8');
+        const raw = await fs.promises.readFile(resultsFileJsonl, 'utf8');
         const lines = raw.split('\n').filter(Boolean);
-        const rows = lines.slice(1).map(parseCsvLine).filter((row) => row.length >= 5);
-        const results = rows.map(([name, date, time, totalPlayers, place]) => ({
-            name,
-            date,
-            time,
-            totalPlayers: Number(totalPlayers) || totalPlayers,
-            place: Number(place) || place
-        }));
-        res.json({ results });
+        const games = lines.map((line) => {
+            try {
+                return JSON.parse(line);
+            } catch (err) {
+                return null;
+            }
+        }).filter(Boolean);
+        games.sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
+        res.json({ games });
     } catch (err) {
-        if (err.code === 'ENOENT') {
-            res.json({ results: [] });
+        if (err.code !== 'ENOENT') {
+            res.status(500).json({ error: 'Failed to read results' });
             return;
         }
-        res.status(500).json({ error: 'Failed to read results' });
+        try {
+            const raw = await fs.promises.readFile(resultsFileCsv, 'utf8');
+            const lines = raw.split('\n').filter(Boolean);
+            const rows = lines.slice(1).map(parseCsvLine).filter((row) => row.length >= 5);
+            const results = rows.map(([name, date, time, totalPlayers, place]) => ({
+                name,
+                date,
+                time,
+                totalPlayers: Number(totalPlayers) || totalPlayers,
+                place: Number(place) || place
+            }));
+            res.json({ results });
+        } catch (csvErr) {
+            if (csvErr.code === 'ENOENT') {
+                res.json({ games: [] });
+                return;
+            }
+            res.status(500).json({ error: 'Failed to read results' });
+        }
     }
 });
 

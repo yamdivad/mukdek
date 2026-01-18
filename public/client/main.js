@@ -173,6 +173,16 @@ if (readyBtn) readyBtn.addEventListener('click', () => M.clickReady(true));
 const startBtn = document.getElementById('start-btn');
 if (startBtn) startBtn.addEventListener('click', () => M.requestStart());
 
+const minReadySelect = document.getElementById('min-ready-select');
+if (minReadySelect) {
+    minReadySelect.addEventListener('change', () => {
+        const next = Number(minReadySelect.value);
+        if (Number.isFinite(next)) {
+            M.setMinPlayersToStart(next);
+        }
+    });
+}
+
 const lobbyHistoryBtn = document.getElementById('lobby-history-btn');
 if (lobbyHistoryBtn) {
     lobbyHistoryBtn.addEventListener('click', () => {

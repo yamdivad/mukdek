@@ -6,6 +6,27 @@ if (!M.socket) {
     return;
 } else {
 
+M.updateLobbyCountdown = function updateLobbyCountdown(endsAt) {
+    if (!M.dom.lobbyCountdown) return;
+    if (M.lobbyCountdownTimer) {
+        clearInterval(M.lobbyCountdownTimer);
+        M.lobbyCountdownTimer = null;
+    }
+    if (!endsAt) {
+        M.dom.lobbyCountdown.textContent = '';
+        M.dom.lobbyCountdown.classList.remove('is-active');
+        return;
+    }
+    const updateText = () => {
+        const remainingMs = endsAt - Date.now();
+        const remaining = Math.max(0, Math.ceil(remainingMs / 1000));
+        M.dom.lobbyCountdown.textContent = remaining > 0 ? `Starting in ${remaining}s` : 'Starting now...';
+    };
+    updateText();
+    M.lobbyCountdownTimer = setInterval(updateText, 1000);
+    M.dom.lobbyCountdown.classList.add('is-active');
+};
+
 M.socket.on('gameModeUpdate', (mode) => {
     M.currentGameMode = mode;
     document.body.classList.toggle('mode-6p', mode === '6p');
@@ -77,6 +98,10 @@ M.socket.on('emojiReaction', (data) => {
 });
 
 M.socket.on('lobbyUpdate', (state) => {
+    const maxPlayers = (M.currentGameMode === '2p') ? 2 : (M.currentGameMode === '6p' ? 6 : 4);
+    let minPlayers = Number.isFinite(state.minPlayersToStart) ? state.minPlayersToStart : 2;
+    minPlayers = Math.min(Math.max(2, minPlayers), maxPlayers);
+
     const isLightColor = (hex) => {
         if (!hex || typeof hex !== 'string') return false;
         const match = hex.trim().match(/^#([0-9a-f]{6})$/i);
@@ -198,7 +223,7 @@ M.socket.on('lobbyUpdate', (state) => {
             M.dom.readyBtn.textContent = "CHANGE";
             M.dom.readyBtn.style.background = "#757575";
             M.dom.readyBtn.onclick = () => M.clickReady(false);
-            document.getElementById('lobby-msg').textContent = "Ready! Waiting for host...";
+            document.getElementById('lobby-msg').textContent = `Ready! Auto-start at ${minPlayers} ready players.`;
         } else {
             M.dom.nameInput.disabled = false;
             if (M.myPlayerId !== 1) {
@@ -206,7 +231,7 @@ M.socket.on('lobbyUpdate', (state) => {
                 M.dom.readyBtn.textContent = "I'M READY";
                 M.dom.readyBtn.style.background = "#0277bd";
                 M.dom.readyBtn.onclick = () => M.clickReady(true);
-                document.getElementById('lobby-msg').textContent = "Pick color/initials, then click Ready.";
+                document.getElementById('lobby-msg').textContent = `Pick color/initials, then click Ready. Auto-start at ${minPlayers}.`;
             }
         }
 
@@ -255,39 +280,67 @@ M.socket.on('lobbyUpdate', (state) => {
 
     if (M.socket.id === state.hostId) {
         let seated = Object.values(state.players).filter(p => p !== null);
-        let allReady = seated.length >= 2 && seated.every(p => p.color !== null);
+        let readyPlayers = seated.filter(p => p.ready);
+        let readyCount = readyPlayers.length;
+        let readyHaveColors = readyPlayers.every(p => p.color !== null);
 
         M.dom.readyBtn.style.display = 'none';
         M.dom.startBtn.style.display = 'block';
         M.dom.claimHostBtn.style.display = 'none';
 
         let validMode = true;
-        if (M.currentGameMode === '2p' && seated.length !== 2) validMode = false;
-        if (M.currentGameMode === '6p' && seated.length < 2) validMode = false;
-        if (M.currentGameMode === '4p' && seated.length > 4) validMode = false;
+        if (M.currentGameMode === '2p' && readyCount !== 2) validMode = false;
+        if (M.currentGameMode === '6p' && readyCount < 2) validMode = false;
+        if (M.currentGameMode === '4p' && readyCount > 4) validMode = false;
 
-        if (allReady && validMode) {
+        if (readyHaveColors && readyCount >= minPlayers && validMode) {
             M.dom.startBtn.classList.add('ready');
             M.dom.startBtn.disabled = false;
-            document.getElementById('lobby-msg').textContent = "You are the Host. Start when everyone is ready.";
+            document.getElementById('lobby-msg').textContent = `You are the Host. Auto-start at ${minPlayers} ready players.`;
         } else {
             M.dom.startBtn.classList.remove('ready');
             M.dom.startBtn.disabled = true;
-            if (M.currentGameMode === '2p' && seated.length !== 2) {
+            if (M.currentGameMode === '2p' && readyCount !== 2) {
                 document.getElementById('lobby-msg').textContent = "Duel Mode requires exactly 2 players.";
-            } else if (M.currentGameMode === '4p' && seated.length > 4) {
+            } else if (M.currentGameMode === '4p' && readyCount > 4) {
                 document.getElementById('lobby-msg').textContent = "Classic Mode supports max 4 players.";
+            } else if (!readyHaveColors && readyCount > 0) {
+                document.getElementById('lobby-msg').textContent = "Waiting on ready players to pick colors.";
             } else {
-                document.getElementById('lobby-msg').textContent = "Waiting for players...";
+                document.getElementById('lobby-msg').textContent = "Waiting for players to ready up...";
             }
+        }
+
+        if (M.dom.lobbyStartConfig && M.dom.minReadySelect) {
+            M.dom.lobbyStartConfig.style.display = 'block';
+            M.dom.minReadySelect.disabled = (maxPlayers === 2);
+            const existing = Array.from(M.dom.minReadySelect.options).map(opt => opt.value).join(',');
+            const desired = Array.from({ length: maxPlayers - 1 }, (_, i) => String(i + 2)).join(',');
+            if (existing !== desired) {
+                M.dom.minReadySelect.innerHTML = '';
+                for (let i = 2; i <= maxPlayers; i++) {
+                    const opt = document.createElement('option');
+                    opt.value = String(i);
+                    opt.textContent = String(i);
+                    M.dom.minReadySelect.appendChild(opt);
+                }
+            }
+            M.dom.minReadySelect.value = String(minPlayers);
         }
     } else {
         M.dom.startBtn.style.display = 'none';
+        if (M.dom.lobbyStartConfig) {
+            M.dom.lobbyStartConfig.style.display = 'none';
+        }
         if (M.myPlayerId === 1) {
             M.dom.claimHostBtn.style.display = 'block';
         } else {
             M.dom.claimHostBtn.style.display = 'none';
         }
+    }
+
+    if (typeof M.updateLobbyCountdown === 'function') {
+        M.updateLobbyCountdown(state.startCountdownEndsAt);
     }
 });
 
@@ -576,6 +629,9 @@ M.socket.on('gameStart', (mode) => {
     M.currentGameMode = mode;
     document.body.classList.toggle('mode-6p', mode === '6p');
     document.body.classList.remove('lobby-open');
+    if (typeof M.updateLobbyCountdown === 'function') {
+        M.updateLobbyCountdown(null);
+    }
     if (typeof M.setMainMenuOpen === 'function') {
         M.setMainMenuOpen(false);
     }
@@ -600,6 +656,9 @@ M.socket.on('gameStart', (mode) => {
 M.socket.on('gameReset', () => {
      M.dom.lobbyOverlay.style.display = 'flex';
      document.body.classList.add('lobby-open');
+     if (typeof M.updateLobbyCountdown === 'function') {
+         M.updateLobbyCountdown(null);
+     }
      if (typeof M.setMainMenuOpen === 'function') {
          M.setMainMenuOpen(false);
      }

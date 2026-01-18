@@ -11,6 +11,8 @@ const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
 const EMOJI_REACTIONS = new Set(['😀', '🤣', '😎', '😡', '😱', '😳', '💩', '🫠', '☠️', '🎻']);
 const TURN_NOTIFICATION_DELAY_MS = Number(process.env.TURN_NOTIFICATION_DELAY_MS) || 60000;
+const LOBBY_START_COUNTDOWN_MS = Number(process.env.LOBBY_START_COUNTDOWN_MS) || 20000;
+const MIN_PLAYERS_DEFAULT = 2;
 const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -95,25 +97,7 @@ function getNextAvailableBotColor(pid, currentPlayers) {
     return '#999999';
 }
 
-function formatDateLocal(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
 
-function formatTimeLocal(date) {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
-}
-
-function csvEscape(value) {
-    const text = String(value ?? '');
-    if (!/[",\n]/.test(text)) return text;
-    return `"${text.replace(/"/g, '""')}"`;
-}
 
 class GameRoom {
     constructor(io, roomId, dataDir) {
@@ -129,6 +113,7 @@ class GameRoom {
         this.gameDestructionTimeout = null;
         this.gameMode = '4p';
         this.lightningMode = false;
+        this.minPlayersToStart = MIN_PLAYERS_DEFAULT;
         this.lastActive = Date.now();
 
         this.persistTimeout = null;
@@ -139,6 +124,8 @@ class GameRoom {
         this.lastNotifiedTurn = 0;
         this.turnNotifyTimeout = null;
         this.pendingTurnCounter = null;
+        this.startCountdownTimeout = null;
+        this.startCountdownEndsAt = null;
 
         this.botAgent = new BotAgent(this, gameLogic);
         this.hardBotAgent = new HardBotAgent(this, gameLogic);
@@ -209,6 +196,7 @@ class GameRoom {
             gameMode: this.gameMode,
             lightningMode: this.lightningMode,
             totalPlayersAtStart: this.totalPlayersAtStart,
+            minPlayersToStart: this.minPlayersToStart,
             pushSubscriptions: Object.fromEntries(this.pushSubscriptions),
             lastNotifiedTurn: this.lastNotifiedTurn
         };
@@ -257,6 +245,7 @@ class GameRoom {
             this.gameMode = ['2p', '4p', '6p'].includes(data.gameMode) ? data.gameMode : '4p';
             this.lightningMode = !!data.lightningMode;
             this.totalPlayersAtStart = Number.isFinite(data.totalPlayersAtStart) ? data.totalPlayersAtStart : 0;
+            this.minPlayersToStart = this.normalizeMinPlayers(data.minPlayersToStart, this.gameMode);
             this.pushSubscriptions = this.normalizePushSubscriptions(data.pushSubscriptions);
             this.lastNotifiedTurn = Number.isFinite(data.lastNotifiedTurn) ? data.lastNotifiedTurn : 0;
             this.hostSocketId = null;
@@ -268,6 +257,7 @@ class GameRoom {
     }
 
     sendCurrentState(socket) {
+        this.evaluateStartCountdown();
         socket.emit('lobbyUpdate', this.getLobbyState());
         socket.emit('gameModeUpdate', this.gameMode);
         if (this.gameState) {
@@ -283,6 +273,7 @@ class GameRoom {
     }
 
     emitLobbyUpdate() {
+        this.evaluateStartCountdown();
         this.io.to(this.roomId).emit('lobbyUpdate', this.getLobbyState());
         this.markActive();
         this.schedulePersist();
@@ -326,27 +317,34 @@ class GameRoom {
         if (finishOrder.length === 0) return;
 
         const totalPlayers = this.totalPlayersAtStart || finishOrder.length;
-        const now = new Date();
-        const dateStr = formatDateLocal(now);
-        const timeStr = formatTimeLocal(now);
         const nameMap = this.gameState.playerNames || {};
+        const colorMap = this.gameState.playerColors || {};
+        const endedAt = Date.now();
+        const startedAt = Number.isFinite(this.gameState.stats && this.gameState.stats.startTime)
+            ? this.gameState.stats.startTime
+            : endedAt;
 
-        const rows = finishOrder.map((pid, idx) => ([
-            nameMap[pid] || `P${pid}`,
-            dateStr,
-            timeStr,
+        const record = {
+            gameId: `${this.roomId}-${startedAt}`,
+            roomId: this.roomId,
+            mode: this.gameState.mode || this.gameMode,
+            lightningMode: !!this.lightningMode,
+            startedAt,
+            endedAt,
+            durationMs: Math.max(0, endedAt - startedAt),
             totalPlayers,
-            idx + 1
-        ]));
+            placements: finishOrder.map((pid, idx) => ({
+                place: idx + 1,
+                playerId: Number(pid),
+                playerName: nameMap[pid] || `P${pid}`,
+                playerColor: colorMap[pid] || null
+            }))
+        };
 
-        const filePath = path.join(this.dataDir, 'game-results.csv');
+        const filePath = path.join(this.dataDir, 'game-results.jsonl');
         try {
             await fs.promises.mkdir(this.dataDir, { recursive: true });
-            const needsHeader = !fs.existsSync(filePath);
-            let payload = '';
-            if (needsHeader) payload += 'Name,Date,Time,Total Players,Place\n';
-            payload += rows.map(row => row.map(csvEscape).join(',')).join('\n') + '\n';
-            await fs.promises.appendFile(filePath, payload);
+            await fs.promises.appendFile(filePath, JSON.stringify(record) + '\n');
             this.gameState.stats.gameResultsLogged = true;
             this.schedulePersist();
         } catch (err) {
@@ -606,6 +604,7 @@ class GameRoom {
         socket.on('setName', (nameInput) => this.onSetName(socket, nameInput));
         socket.on('selectColor', (hex) => this.onSelectColor(socket, hex));
         socket.on('playerReady', (status) => this.onPlayerReady(socket, status));
+        socket.on('setMinPlayersToStart', (count) => this.onSetMinPlayersToStart(socket, count));
         socket.on('kickPlayer', (targetPid) => this.onKickPlayer(socket, targetPid));
         socket.on('claimHost', () => this.onClaimHost(socket));
         socket.on('requestStartGame', () => this.onRequestStartGame(socket));
@@ -629,6 +628,7 @@ class GameRoom {
 
             if (pid === '1') {
                 this.hostSocketId = socket.id;
+                this.players[pid].ready = true;
             } else if (this.hostSocketId === null) {
                 this.hostSocketId = socket.id;
             }
@@ -666,6 +666,135 @@ class GameRoom {
         this.emitLobbyUpdate();
     }
 
+    getMaxPlayersForMode(mode) {
+        if (mode === '2p') return 2;
+        if (mode === '6p') return 6;
+        return 4;
+    }
+
+    normalizeMinPlayers(value, mode) {
+        const maxPlayers = this.getMaxPlayersForMode(mode);
+        let minPlayers = Number.isFinite(value) ? Math.floor(value) : MIN_PLAYERS_DEFAULT;
+        if (mode === '2p') return 2;
+        if (minPlayers < 2) minPlayers = 2;
+        if (minPlayers > maxPlayers) minPlayers = maxPlayers;
+        return minPlayers;
+    }
+
+    getReadyPlayers() {
+        return Object.entries(this.players).filter(([k, v]) => v && v.ready);
+    }
+
+    canStartGame() {
+        if (this.gameState) return false;
+        const readyPlayers = this.getReadyPlayers();
+        const readyCount = readyPlayers.length;
+        if (readyCount < this.minPlayersToStart) return false;
+        if (readyCount < 2) return false;
+        const maxPlayers = this.getMaxPlayersForMode(this.gameMode);
+        if (this.gameMode === '2p' && readyCount !== 2) return false;
+        if (readyCount > maxPlayers) return false;
+        if (!readyPlayers.every(([k, v]) => v.color !== null)) return false;
+        return true;
+    }
+
+    clearStartCountdown() {
+        if (this.startCountdownTimeout) {
+            clearTimeout(this.startCountdownTimeout);
+            this.startCountdownTimeout = null;
+        }
+        this.startCountdownEndsAt = null;
+    }
+
+    evaluateStartCountdown() {
+        if (this.gameState) {
+            this.clearStartCountdown();
+            return;
+        }
+        if (this.canStartGame()) {
+            if (!this.startCountdownTimeout) {
+                this.startCountdownEndsAt = Date.now() + LOBBY_START_COUNTDOWN_MS;
+                this.startCountdownTimeout = setTimeout(() => {
+                    this.startCountdownTimeout = null;
+                    this.startCountdownEndsAt = null;
+                    if (this.canStartGame()) {
+                        this.startGame();
+                    } else {
+                        this.emitLobbyUpdate();
+                    }
+                }, LOBBY_START_COUNTDOWN_MS);
+                void this.sendLobbyNotification('Game starting soon', `Starting in ${Math.ceil(LOBBY_START_COUNTDOWN_MS / 1000)}s.`);
+            }
+        } else if (this.startCountdownTimeout) {
+            this.clearStartCountdown();
+        }
+    }
+
+    async sendLobbyNotification(title, body) {
+        if (!PUSH_ENABLED) return;
+        const playersBySession = new Map();
+        Object.values(this.players).forEach((player) => {
+            if (player && player.session) {
+                playersBySession.set(player.session, player);
+            }
+        });
+        const roomId = this.roomId;
+        const payload = JSON.stringify({
+            title,
+            body,
+            url: this.buildRoomUrl(),
+            roomId,
+            tag: `mukdek-lobby-${roomId}`
+        });
+        for (const [sessionId, subscription] of this.pushSubscriptions.entries()) {
+            const player = playersBySession.get(sessionId);
+            if (!player || player.isBot) continue;
+            if (player.id && this.connectedSockets.has(player.id)) continue;
+            try {
+                await webpush.sendNotification(subscription, payload);
+            } catch (err) {
+                if (err && (err.statusCode === 404 || err.statusCode === 410)) {
+                    this.removePushSubscription(sessionId);
+                } else {
+                    console.error(`Push send failed for room ${this.roomId}:`, err);
+                }
+            }
+        }
+    }
+
+    startGame() {
+        if (!this.canStartGame()) return;
+        this.clearStartCountdown();
+
+        let readyPlayers = this.getReadyPlayers();
+        let activeCount = readyPlayers.length;
+
+        console.log(`Starting ${this.gameMode} game in room ${this.roomId} with ${activeCount} ready players.`);
+        this.totalPlayersAtStart = activeCount;
+
+        let colorMap = {};
+        let nameMap = {};
+        readyPlayers.forEach(([k, v]) => {
+            colorMap[k] = v.color;
+            nameMap[k] = v.name;
+        });
+
+        this.gameState = gameLogic.initServerState(this.gameMode, colorMap);
+        this.gameState.playerNames = nameMap;
+
+        let firstActive = parseInt(readyPlayers[0][0]);
+        this.gameState.activePlayer = firstActive;
+
+        let maxP = this.getMaxPlayersForMode(this.gameMode);
+        for (let i = 1; i <= maxP; i++) {
+            if (!colorMap[i]) this.gameState.finishedPlayers.push(i);
+        }
+
+        void this.sendLobbyNotification('Game started', 'Your room is live.');
+        this.io.to(this.roomId).emit('gameStart', this.gameMode);
+        this.broadcastGameState();
+    }
+
     onSetGameMode(socket, mode) {
         if (socket.id !== this.hostSocketId) return;
         if (this.gameState) return;
@@ -673,7 +802,9 @@ class GameRoom {
 
         if (['2p', '4p', '6p'].includes(mode)) {
             this.gameMode = mode;
+            this.minPlayersToStart = this.normalizeMinPlayers(this.minPlayersToStart, this.gameMode);
             this.emitGameModeUpdate();
+            this.emitLobbyUpdate();
         }
     }
 
@@ -789,6 +920,7 @@ class GameRoom {
         let pEntry = Object.entries(this.players).find(([k, v]) => v && v.id === socket.id);
         if (pEntry && pEntry[0] === '1') {
             this.hostSocketId = socket.id;
+            this.players[1].ready = true;
             console.log(`Player 1 manually claimed host in room ${this.roomId}.`);
             this.emitLobbyUpdate();
         }
@@ -797,41 +929,7 @@ class GameRoom {
     onRequestStartGame(socket) {
         if (socket.id !== this.hostSocketId) return;
         this.markActive();
-
-        let seatedPlayers = Object.entries(this.players).filter(([k, v]) => v !== null);
-        let activeCount = seatedPlayers.length;
-        let allColors = seatedPlayers.every(([k, v]) => v.color !== null);
-
-        if (this.gameMode === '2p' && activeCount !== 2) return;
-        if (this.gameMode === '4p' && activeCount < 2) return;
-        if (this.gameMode === '4p' && activeCount > 4) return;
-        if (this.gameMode === '6p' && activeCount < 2) return;
-
-        if (allColors && !this.gameState) {
-            console.log(`Starting ${this.gameMode} game in room ${this.roomId} with ${activeCount} players.`);
-            this.totalPlayersAtStart = activeCount;
-
-            let colorMap = {};
-            let nameMap = {};
-            seatedPlayers.forEach(([k, v]) => {
-                colorMap[k] = v.color;
-                nameMap[k] = v.name;
-            });
-
-            this.gameState = gameLogic.initServerState(this.gameMode, colorMap);
-            this.gameState.playerNames = nameMap;
-
-            let firstActive = parseInt(seatedPlayers[0][0]);
-            this.gameState.activePlayer = firstActive;
-
-            let maxP = (this.gameMode === '2p') ? 2 : (this.gameMode === '6p' ? 6 : 4);
-            for (let i = 1; i <= maxP; i++) {
-                if (this.players[i] === null) this.gameState.finishedPlayers.push(i);
-            }
-
-            this.io.to(this.roomId).emit('gameStart', this.gameMode);
-            this.broadcastGameState();
-        }
+        this.startGame();
     }
 
     onResetGame(socket) {
@@ -844,10 +942,12 @@ class GameRoom {
         this.gameState = null;
         this.lightningMode = false;
         this.clearBotTimers();
+        this.clearStartCountdown();
 
         let seatedCount = Object.values(this.players).filter(p => p !== null).length;
         if (seatedCount > 4) this.gameMode = '6p';
         else this.gameMode = '4p';
+        this.minPlayersToStart = this.normalizeMinPlayers(this.minPlayersToStart, this.gameMode);
 
         for (let i = 1; i <= 6; i++) {
             if (this.players[i]) {
@@ -859,6 +959,18 @@ class GameRoom {
         this.emitLightningStatus();
         this.emitGameModeUpdate();
         this.io.to(this.roomId).emit('gameReset');
+        this.emitLobbyUpdate();
+    }
+
+    onSetMinPlayersToStart(socket, count) {
+        if (socket.id !== this.hostSocketId) return;
+        if (this.gameState) return;
+        this.markActive();
+
+        const parsed = Number(count);
+        if (!Number.isFinite(parsed)) return;
+
+        this.minPlayersToStart = this.normalizeMinPlayers(parsed, this.gameMode);
         this.emitLobbyUpdate();
     }
 
@@ -1356,7 +1468,9 @@ class GameRoom {
         return {
             players: this.players,
             seatedCount: Object.values(this.players).filter(p => p !== null).length,
-            hostId: this.hostSocketId
+            hostId: this.hostSocketId,
+            minPlayersToStart: this.minPlayersToStart,
+            startCountdownEndsAt: this.startCountdownEndsAt
         };
     }
 
