@@ -13,7 +13,9 @@ self.addEventListener('push', (event) => {
     body: data.body || 'It is your turn.',
     icon: '/favicon.svg',
     badge: '/favicon.svg',
-    data: { url: data.url || '/' }
+    data: { url: data.url || '/' },
+    tag: data.tag || 'mukdek-turn',
+    renotify: false
   };
 
   event.waitUntil(self.registration.showNotification(title, options));

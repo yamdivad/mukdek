@@ -10,6 +10,7 @@ const SIMILARITY_THRESHOLD = 10;
 const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS) || (1000 * 60 * 60 * 24 * 15);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS) || (1000 * 60 * 10);
 const EMOJI_REACTIONS = new Set(['😀', '🤣', '😎', '😡', '😱', '😳', '💩', '🫠', '☠️', '🎻']);
+const TURN_NOTIFICATION_DELAY_MS = Number(process.env.TURN_NOTIFICATION_DELAY_MS) || 60000;
 const PUBLIC_ORIGIN = process.env.PUBLIC_ORIGIN || process.env.RENDER_EXTERNAL_URL || '';
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -136,6 +137,8 @@ class GameRoom {
         this.emojiCooldowns = new Map();
         this.pushSubscriptions = new Map();
         this.lastNotifiedTurn = 0;
+        this.turnNotifyTimeout = null;
+        this.pendingTurnCounter = null;
 
         this.botAgent = new BotAgent(this, gameLogic);
         this.hardBotAgent = new HardBotAgent(this, gameLogic);
@@ -302,7 +305,7 @@ class GameRoom {
         this.markActive();
         this.schedulePersist();
         this.scheduleBotAction();
-        void this.maybeNotifyTurn();
+        this.scheduleTurnNotification();
     }
 
     async logGameResultsIfNeeded() {
@@ -516,7 +519,7 @@ class GameRoom {
         return base ? `${base}${path}` : path;
     }
 
-    async maybeNotifyTurn() {
+    async sendTurnNotification() {
         if (!PUSH_ENABLED) return;
         if (!this.gameState || this.gameState.phase !== 'play') return;
         const turnCounter = this.gameState.turnCounter || 0;
@@ -529,15 +532,22 @@ class GameRoom {
             return;
         }
 
+        if (player.id && this.connectedSockets.has(player.id)) {
+            return;
+        }
+
         const subscription = this.pushSubscriptions.get(player.session);
         if (!subscription) return;
 
         this.lastNotifiedTurn = turnCounter;
         const playerName = (this.gameState.playerNames && this.gameState.playerNames[playerId]) || `P${playerId}`;
+        const roomId = this.roomId;
         const payload = JSON.stringify({
             title: 'Your turn',
             body: `${playerName}, it's your move.`,
-            url: this.buildRoomUrl()
+            url: this.buildRoomUrl(),
+            roomId,
+            tag: `mukdek-${roomId}`
         });
 
         try {
@@ -549,6 +559,26 @@ class GameRoom {
                 console.error(`Push send failed for room ${this.roomId}:`, err);
             }
         }
+    }
+
+    scheduleTurnNotification() {
+        if (!PUSH_ENABLED) return;
+        if (!this.gameState || this.gameState.phase !== 'play') return;
+        const turnCounter = this.gameState.turnCounter || 0;
+        if (turnCounter === this.pendingTurnCounter) return;
+
+        if (this.turnNotifyTimeout) {
+            clearTimeout(this.turnNotifyTimeout);
+            this.turnNotifyTimeout = null;
+        }
+
+        this.pendingTurnCounter = turnCounter;
+        this.turnNotifyTimeout = setTimeout(() => {
+            this.turnNotifyTimeout = null;
+            if (!this.gameState || this.gameState.phase !== 'play') return;
+            if ((this.gameState.turnCounter || 0) !== turnCounter) return;
+            void this.sendTurnNotification();
+        }, TURN_NOTIFICATION_DELAY_MS);
     }
 
     addSocket(socket) {
