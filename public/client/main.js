@@ -89,6 +89,81 @@ if (M.dom.noticeModal) {
     });
 }
 
+const tutorialSteps = [
+    {
+        title: 'Play Over Time',
+        text: 'Mukdek is designed for quick turns throughout the day. Come back anytime.'
+    },
+    {
+        title: 'Join a Room',
+        text: 'Use Play Now or Rooms to join friends and share the room link.'
+    },
+    {
+        title: 'Ready & Alerts',
+        text: 'Tap Ready when you are set, and enable Turn Alerts in the menu.'
+    }
+];
+
+let tutorialIndex = 0;
+const setTutorialStep = (index) => {
+    if (!M.dom.tutorialOverlay) return;
+    tutorialIndex = Math.max(0, Math.min(tutorialSteps.length - 1, index));
+    const step = tutorialSteps[tutorialIndex];
+    if (M.dom.tutorialTitle) M.dom.tutorialTitle.textContent = step.title;
+    if (M.dom.tutorialText) M.dom.tutorialText.textContent = step.text;
+    if (M.dom.tutorialStepNumber) M.dom.tutorialStepNumber.textContent = String(tutorialIndex + 1);
+    if (M.dom.tutorialBack) M.dom.tutorialBack.style.visibility = tutorialIndex === 0 ? 'hidden' : 'visible';
+    if (M.dom.tutorialNext) {
+        M.dom.tutorialNext.textContent = tutorialIndex === tutorialSteps.length - 1 ? 'DONE' : 'NEXT';
+    }
+};
+
+const closeTutorial = () => {
+    if (M.dom.tutorialOverlay) {
+        M.dom.tutorialOverlay.classList.remove('is-active');
+        M.dom.tutorialOverlay.setAttribute('aria-hidden', 'true');
+    }
+    try {
+        localStorage.setItem('mukdek_tutorial_done', '1');
+    } catch (err) {
+        // Ignore storage failures.
+    }
+};
+
+const maybeShowTutorial = () => {
+    if (!M.dom.tutorialOverlay) return;
+    if (document.body.classList.contains('lobby-open') === false) return;
+    try {
+        if (localStorage.getItem('mukdek_tutorial_done') === '1') return;
+    } catch (err) {
+        // Ignore storage failures.
+    }
+    setTutorialStep(0);
+    M.dom.tutorialOverlay.classList.add('is-active');
+    M.dom.tutorialOverlay.setAttribute('aria-hidden', 'false');
+};
+
+if (M.dom.tutorialBack) {
+    M.dom.tutorialBack.addEventListener('click', () => setTutorialStep(tutorialIndex - 1));
+}
+if (M.dom.tutorialNext) {
+    M.dom.tutorialNext.addEventListener('click', () => {
+        if (tutorialIndex >= tutorialSteps.length - 1) {
+            closeTutorial();
+        } else {
+            setTutorialStep(tutorialIndex + 1);
+        }
+    });
+}
+if (M.dom.tutorialSkip) {
+    M.dom.tutorialSkip.addEventListener('click', closeTutorial);
+}
+if (M.dom.tutorialOverlay) {
+    M.dom.tutorialOverlay.addEventListener('click', (event) => {
+        if (event.target === M.dom.tutorialOverlay) closeTutorial();
+    });
+}
+
 const claimHostBtn = document.getElementById('claim-host-btn');
 if (claimHostBtn) claimHostBtn.addEventListener('click', () => M.claimHostManual());
 
@@ -97,6 +172,29 @@ if (readyBtn) readyBtn.addEventListener('click', () => M.clickReady(true));
 
 const startBtn = document.getElementById('start-btn');
 if (startBtn) startBtn.addEventListener('click', () => M.requestStart());
+
+const lobbyHistoryBtn = document.getElementById('lobby-history-btn');
+if (lobbyHistoryBtn) {
+    lobbyHistoryBtn.addEventListener('click', () => {
+        if (typeof M.setHistoryOpen === 'function') {
+            M.setHistoryOpen(true);
+        }
+        if (typeof M.fetchGameHistory === 'function') {
+            M.fetchGameHistory();
+        }
+    });
+}
+
+if (M.dom.historyToggle && M.dom.historyPanel) {
+    M.dom.historyToggle.addEventListener('click', () => {
+        const isOpen = M.dom.historyPanel.classList.contains('active');
+        const next = !isOpen;
+        M.dom.historyPanel.classList.toggle('active', next);
+        M.dom.historyToggle.classList.toggle('is-open', next);
+        M.dom.historyToggle.setAttribute('aria-expanded', String(next));
+        M.dom.historyPanel.setAttribute('aria-hidden', String(!next));
+    });
+}
 
 const mode2pBtn = document.getElementById('btn-mode-2p');
 if (mode2pBtn) mode2pBtn.addEventListener('click', () => M.selectMode('2p'));
@@ -118,6 +216,13 @@ if (M.dom.menuStats) {
     M.dom.menuStats.addEventListener('click', () => {
         M.setMainMenuOpen(false);
         M.setStatsOpen(true);
+    });
+}
+
+if (M.dom.menuHistory) {
+    M.dom.menuHistory.addEventListener('click', () => {
+        M.setMainMenuOpen(false);
+        M.toggleHistory();
     });
 }
 
@@ -314,6 +419,18 @@ if (M.dom.statsCloseBtn) {
     });
 }
 
+if (M.dom.historyOverlay) {
+    M.dom.historyOverlay.addEventListener('click', (event) => {
+        if (event.target === M.dom.historyOverlay) M.setHistoryOpen(false);
+    });
+}
+
+if (M.dom.historyCloseBtn) {
+    M.dom.historyCloseBtn.addEventListener('click', () => {
+        M.setHistoryOpen(false);
+    });
+}
+
 if (M.dom.shortcutTargetCancel) {
     M.dom.shortcutTargetCancel.addEventListener('click', () => {
         M.hideShortcutTargetModal();
@@ -355,6 +472,7 @@ document.addEventListener('click', (event) => {
 document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (M.uiState.statsOpen) M.setStatsOpen(false);
+    if (M.uiState.historyOpen) M.setHistoryOpen(false);
     if (M.uiState.mainMenuOpen) M.setMainMenuOpen(false);
     if (M.dom.roomNameModal && M.dom.roomNameModal.classList.contains('active')) {
         M.closeRoomNameModal();
@@ -387,6 +505,7 @@ window.addEventListener('focus', updateNotificationBanner);
 
 M.initLobbyUI();
 M.refreshRooms();
+maybeShowTutorial();
 if (M.dom.roomListBody) {
     M.roomRefreshInterval = setInterval(() => {
         if (!document.hidden) M.refreshRooms();

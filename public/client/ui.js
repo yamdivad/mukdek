@@ -39,6 +39,18 @@ M.setStatsOpen = function setStatsOpen(isOpen) {
     }
 };
 
+M.setHistoryOpen = function setHistoryOpen(isOpen) {
+    if (!M.dom.historyOverlay) return;
+    const next = Boolean(isOpen);
+    M.uiState.historyOpen = next;
+    M.dom.historyOverlay.classList.toggle('is-open', next);
+    M.dom.historyOverlay.setAttribute('aria-hidden', String(!next));
+    document.body.classList.toggle('modal-open', next);
+    if (next && M.dom.historyCloseBtn) {
+        M.dom.historyCloseBtn.focus();
+    }
+};
+
 M.setMainMenuOpen = function setMainMenuOpen(isOpen) {
     if (!M.dom.mainMenu || !M.dom.menuBtn) return;
     const next = Boolean(isOpen);
@@ -63,6 +75,17 @@ M.toggleStats = function toggleStats() {
     M.setStatsOpen(next);
     if (next) {
         M.setMainMenuOpen(false);
+    }
+};
+
+M.toggleHistory = function toggleHistory() {
+    const next = !M.uiState.historyOpen;
+    M.setHistoryOpen(next);
+    if (next) {
+        M.setMainMenuOpen(false);
+        if (typeof M.fetchGameHistory === 'function') {
+            M.fetchGameHistory();
+        }
     }
 };
 
@@ -288,6 +311,33 @@ M.renderStats = function renderStats(stats, names) {
 
     if (M.dom.statsBody) {
         M.dom.statsBody.innerHTML = html;
+    }
+};
+
+M.renderHistory = function renderHistory(results) {
+    if (!M.dom.historyBody) return;
+    if (!Array.isArray(results) || results.length === 0) {
+        M.dom.historyBody.textContent = 'No completed games yet.';
+        return;
+    }
+    let html = '<table class="stats-table"><tr><th>Date</th><th>Time</th><th>Name</th><th>Players</th><th>Place</th></tr>';
+    results.forEach((row) => {
+        html += `<tr><td>${row.date}</td><td>${row.time}</td><td>${row.name}</td><td>${row.totalPlayers}</td><td>${row.place}</td></tr>`;
+    });
+    html += '</table>';
+    M.dom.historyBody.innerHTML = html;
+};
+
+M.fetchGameHistory = async function fetchGameHistory() {
+    if (!M.dom.historyBody) return;
+    M.dom.historyBody.textContent = 'Loading...';
+    try {
+        const res = await fetch('/results');
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        M.renderHistory(data.results || []);
+    } catch (err) {
+        M.dom.historyBody.textContent = 'Unable to load history.';
     }
 };
 

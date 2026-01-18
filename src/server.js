@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const helmet = require('helmet');
+const fs = require('fs');
 const path = require('path');
 const GameManager = require('./managers/GameManager');
 
@@ -74,6 +75,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'server', 'data');
 const gameManager = new GameManager(io, DATA_DIR);
+const resultsFile = path.join(DATA_DIR, 'game-results.csv');
 const restartToken = process.env.RESTART_TOKEN;
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const adminToken = process.env.ADMIN_TOKEN;
@@ -109,6 +111,58 @@ app.get('/restart', (req, res) => {
 
 app.get('/rooms', (req, res) => {
     res.json({ rooms: gameManager.getRoomsSummary() });
+});
+
+function parseCsvLine(line) {
+    const out = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') {
+                cur += '"';
+                i++;
+            } else if (ch === '"') {
+                inQuotes = false;
+            } else {
+                cur += ch;
+            }
+        } else {
+            if (ch === ',') {
+                out.push(cur);
+                cur = '';
+            } else if (ch === '"') {
+                inQuotes = true;
+            } else {
+                cur += ch;
+            }
+        }
+    }
+    out.push(cur);
+    return out;
+}
+
+app.get('/results', async (req, res) => {
+    try {
+        const raw = await fs.promises.readFile(resultsFile, 'utf8');
+        const lines = raw.split('\n').filter(Boolean);
+        const rows = lines.slice(1).map(parseCsvLine).filter((row) => row.length >= 5);
+        const results = rows.map(([name, date, time, totalPlayers, place]) => ({
+            name,
+            date,
+            time,
+            totalPlayers: Number(totalPlayers) || totalPlayers,
+            place: Number(place) || place
+        }));
+        res.json({ results });
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            res.json({ results: [] });
+            return;
+        }
+        res.status(500).json({ error: 'Failed to read results' });
+    }
 });
 
 app.get('/push/vapid-public-key', (req, res) => {

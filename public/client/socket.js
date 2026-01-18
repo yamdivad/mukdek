@@ -77,6 +77,18 @@ M.socket.on('emojiReaction', (data) => {
 });
 
 M.socket.on('lobbyUpdate', (state) => {
+    const isLightColor = (hex) => {
+        if (!hex || typeof hex !== 'string') return false;
+        const match = hex.trim().match(/^#([0-9a-f]{6})$/i);
+        if (!match) return false;
+        const value = match[1];
+        const r = parseInt(value.slice(0, 2), 16);
+        const g = parseInt(value.slice(2, 4), 16);
+        const b = parseInt(value.slice(4, 6), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+        return luminance > 200;
+    };
+
     if (M.dom.menuLightning) M.dom.menuLightning.disabled = true;
     if (M.dom.menuRestart) M.dom.menuRestart.disabled = true;
     if (M.myPlayerId === 1) {
@@ -138,6 +150,7 @@ M.socket.on('lobbyUpdate', (state) => {
             tk.className = 'tracker-slot joined';
             let c = pData.color || '#9e9e9e';
             tk.style.backgroundColor = c;
+            if (isLightColor(c)) tk.classList.add('light-bg');
 
             let statusSymbol = '';
             if (pData.isBot) statusSymbol = '🤖';
@@ -565,6 +578,10 @@ M.socket.on('gameStart', (mode) => {
     document.body.classList.remove('lobby-open');
     if (typeof M.setMainMenuOpen === 'function') {
         M.setMainMenuOpen(false);
+    }
+    if (M.dom.tutorialOverlay) {
+        M.dom.tutorialOverlay.classList.remove('is-active');
+        M.dom.tutorialOverlay.setAttribute('aria-hidden', 'true');
     }
     if (typeof M.updateNotificationBanner === 'function') {
         M.updateNotificationBanner();

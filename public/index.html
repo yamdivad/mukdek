@@ -7,6 +7,14 @@
     
     <link rel="icon" type="image/svg+xml" href="favicon.svg" id="dynamic-favicon">
     <link rel="stylesheet" href="style.css">
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FLY3QRX7NG"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-FLY3QRX7NG');
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
@@ -111,6 +119,21 @@
                     </div>
                 </section>
 
+                <section class="lobby-card lobby-history">
+                    <div class="lobby-card-header">
+                        <h2>Game History</h2>
+                        <p>Review completed matches and standings.</p>
+                    </div>
+                    <button id="history-toggle" class="history-toggle" type="button" aria-expanded="false" aria-controls="history-panel">
+                        History
+                        <span class="history-toggle-icon" aria-hidden="true">+</span>
+                    </button>
+                    <div id="history-panel" class="history-panel" aria-hidden="true">
+                        <button id="lobby-history-btn" class="btn-base" type="button">VIEW HISTORY</button>
+                        <p class="lobby-helper-small">History appears after games finish.</p>
+                    </div>
+                </section>
+
                 <section class="lobby-card lobby-install">
                     <div class="lobby-card-header">
                         <h2>Add to home screen</h2>
@@ -133,6 +156,10 @@
                         </div>
                     </div>
                 </section>
+
+                <div class="lobby-fineprint">
+                    A game by <a href="https://www.pogonacreative.com" target="_blank" rel="noopener">Pogona Creative</a>
+                </div>
             </div>
         </div>
     </div>
@@ -170,6 +197,19 @@
         </div>
     </div>
 
+    <div id="tutorial-overlay" class="tutorial-overlay" aria-hidden="true">
+        <div class="tutorial-card" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+            <div class="tutorial-step">Step <span id="tutorial-step-number">1</span> of 3</div>
+            <h2 id="tutorial-title">Welcome to Mukdek</h2>
+            <p id="tutorial-text">Play a few moves at a time and come back whenever you like.</p>
+            <div class="tutorial-actions">
+                <button id="tutorial-back" class="modal-btn btn-no" type="button">BACK</button>
+                <button id="tutorial-next" class="modal-btn btn-yes" type="button">NEXT</button>
+            </div>
+            <button id="tutorial-skip" class="tutorial-skip" type="button">SKIP</button>
+        </div>
+    </div>
+
     <div id="game-header">
         <span class="header-spacer" aria-hidden="true"></span>
         <span id="identity-text">MUKDEK</span>
@@ -183,6 +223,7 @@
         
         <div id="main-menu" role="menu" aria-label="Main menu" aria-hidden="true">
             <button id="menu-stats" type="button">GAME STATS</button>
+            <button id="menu-history" type="button">GAME HISTORY</button>
             <button id="menu-lightning" type="button">ENABLE LIGHTNING</button>
             <button id="menu-notifications" type="button">ENABLE TURN ALERTS</button>
             <button id="menu-restart" type="button">RESTART GAME</button>
@@ -219,6 +260,14 @@
                     <h2 id="stats-title">Game Stats</h2>
                     <div id="stats-body">Waiting for data...</div>
                     <button id="stats-close-btn" class="btn-base" type="button" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
+                </div>
+            </div>
+
+            <div id="history-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="history-title">
+                <div class="modal-content">
+                    <h2 id="history-title">Game History</h2>
+                    <div id="history-body">Loading...</div>
+                    <button id="history-close-btn" class="btn-base" type="button" style="margin-top:20px; background:#5d4037; font-size:1em; padding:10px;">CLOSE</button>
                 </div>
             </div>
         </div>

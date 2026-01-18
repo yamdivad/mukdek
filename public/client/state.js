@@ -33,7 +33,7 @@ Mukdek.constipationPlayedBy = new Set();
 Mukdek.constipationKey = null;
 Mukdek.isFirstRender = true;
 Mukdek.currentGameMode = '4p';
-Mukdek.uiState = { statsOpen: false, mainMenuOpen: false };
+Mukdek.uiState = { statsOpen: false, historyOpen: false, mainMenuOpen: false };
 Mukdek.introState = { active: false, completed: false };
 Mukdek.introCooldownMs = 24 * 60 * 60 * 1000;
 Mukdek.introStorageKey = 'mukdek_intro_last_played';
@@ -121,6 +121,7 @@ Mukdek.dom = {
     menuBtn: document.getElementById('menu-btn'),
     mainMenu: document.getElementById('main-menu'),
     menuStats: document.getElementById('menu-stats'),
+    menuHistory: document.getElementById('menu-history'),
     menuLightning: document.getElementById('menu-lightning'),
     menuNotifications: document.getElementById('menu-notifications'),
     menuRestart: document.getElementById('menu-restart'),
@@ -129,6 +130,9 @@ Mukdek.dom = {
     statsOverlay: document.getElementById('stats-overlay'),
     statsBody: document.getElementById('stats-body'),
     statsCloseBtn: document.getElementById('stats-close-btn'),
+    historyOverlay: document.getElementById('history-overlay'),
+    historyBody: document.getElementById('history-body'),
+    historyCloseBtn: document.getElementById('history-close-btn'),
     roomInput: document.getElementById('room-input'),
     roomJoinBtn: document.getElementById('room-join-btn'),
     roomCreateBtn: document.getElementById('room-create-btn'),
@@ -149,6 +153,15 @@ Mukdek.dom = {
     noticeTitle: document.getElementById('notice-title'),
     noticeMessage: document.getElementById('notice-message'),
     noticeOk: document.getElementById('notice-ok'),
+    tutorialOverlay: document.getElementById('tutorial-overlay'),
+    tutorialTitle: document.getElementById('tutorial-title'),
+    tutorialText: document.getElementById('tutorial-text'),
+    tutorialStepNumber: document.getElementById('tutorial-step-number'),
+    tutorialBack: document.getElementById('tutorial-back'),
+    tutorialNext: document.getElementById('tutorial-next'),
+    tutorialSkip: document.getElementById('tutorial-skip'),
+    historyToggle: document.getElementById('history-toggle'),
+    historyPanel: document.getElementById('history-panel'),
     roomsToggle: document.getElementById('rooms-toggle'),
     roomsPanel: document.getElementById('rooms-panel'),
     installToggle: document.getElementById('install-toggle'),
